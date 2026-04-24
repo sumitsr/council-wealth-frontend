@@ -75,12 +75,15 @@ export default function Integrations() {
       {/* Provider grid */}
       <section className="grid grid-cols-3 gap-3 mb-8" data-testid="provider-grid">
         {INTEGRATIONS.map((p) => (
-          <button
+          <div
             key={p.provider}
+            role="button"
+            tabIndex={0}
             onClick={() => setSelectedProvider(p.provider)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedProvider(p.provider); } }}
             data-testid={`provider-card-${p.provider}`}
             className={[
-              'text-left relative rounded-sm border p-4 transition-colors overflow-hidden',
+              'cursor-pointer text-left relative rounded-sm border p-4 transition-colors overflow-hidden',
               selectedProvider === p.provider ? 'border-white/30 bg-cw-elevated' : 'border-white/10 bg-cw-surface hover:bg-cw-elevated hover:border-white/20',
             ].join(' ')}
           >
@@ -110,12 +113,16 @@ export default function Integrations() {
                     {p.health.toFixed(1)}%
                   </span>
                 </div>
-                <button className="flex items-center gap-1 font-mono text-[10px] text-white/70 hover:text-white">
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 font-mono text-[10px] text-white/70 hover:text-white"
+                >
                   <ArrowsClockwise size={11} /> Sync now
                 </button>
               </div>
             </div>
-          </button>
+          </div>
         ))}
       </section>
 

@@ -29,9 +29,22 @@ function Filter({ label, value, onClick, testid }) {
 export default function AuditViewer() {
   const [selected, setSelected] = React.useState(AUDIT_SESSIONS[0].id);
   const [vetoedOnly, setVetoedOnly] = React.useState(false);
+  const [query, setQuery] = React.useState('');
   const selectedSession = AUDIT_SESSIONS.find((s) => s.id === selected);
 
-  const rows = vetoedOnly ? AUDIT_SESSIONS.filter((s) => s.outcome === 'VETOED') : AUDIT_SESSIONS;
+  const rows = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return AUDIT_SESSIONS.filter((s) => {
+      if (vetoedOnly && s.outcome !== 'VETOED') return false;
+      if (!q) return true;
+      return (
+        s.id.toLowerCase().includes(q) ||
+        s.clientName.toLowerCase().includes(q) ||
+        s.advisorName.toLowerCase().includes(q) ||
+        s.jurisdiction.toLowerCase().includes(q)
+      );
+    });
+  }, [query, vetoedOnly]);
 
   const steps = selectedSession?.outcome === 'VETOED'
     ? LIVE_STREAM_SCRIPT.slice(0, 7).concat([
@@ -93,6 +106,8 @@ export default function AuditViewer() {
             <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
             <input
               data-testid="audit-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by client, trace ID, or session…"
               className="w-full h-9 pl-9 pr-3 rounded-sm border border-white/10 bg-cw-surface focus:border-cw-running/60 focus:outline-none text-[12px] text-white/90 placeholder:text-white/30"
             />
@@ -129,6 +144,9 @@ export default function AuditViewer() {
               <span className="text-right">WORM</span>
             </div>
             <div className="max-h-[620px] overflow-y-auto">
+              {rows.length === 0 && (
+                <div className="px-4 py-10 text-center text-[12px] text-white/40 font-mono">No sessions match "{query}"</div>
+              )}
               {rows.map((s) => {
                 const active = s.id === selected;
                 return (

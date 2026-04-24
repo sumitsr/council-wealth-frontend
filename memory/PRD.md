@@ -1,56 +1,58 @@
 # Council Wealth — Advisor Command Center UI
 
 ## Original problem statement
-"build ui for this" → Council Wealth Architecture & Low Level Design Master File (Appendix H/I/J). Followed by: "it looks nice. lets completely rebuild it from scratch in a whole new design."
-Council Wealth is a bank-grade, multi-tenant agentic AI platform for independent RIAs. A committee of 14 specialist AI agents deliberates on wealth-planning questions under a hard compliance veto (SentinelCompliance), with PII redaction (Ghost Map) and immutable audit logging (Historian → WORM).
+"build ui for this" → Council Wealth Architecture & Low Level Design Master File (Appendix H/I/J).
+Subsequent user direction:
+- v1: "it looks nice. lets completely rebuild it from scratch in a whole new design." → produced fiduciary-archival rebuild (rejected).
+- v3 (current): "This is not I was looking for. The previous version was good. Let's improve that at next level." → restored the dark-terminal v1 and shipped a full polish pass.
 
-## Architecture (current build — iteration 2)
+## Architecture (current build — iteration 3)
 - **Frontend-only** with rich, domain-specific RIA mock data.
-- Stack: React 19 + React Router 7 + Tailwind CSS + shadcn/radix primitives (unused) + `@phosphor-icons/react`.
-- Typography: **Newsreader** (display italic serif), **Karla** (body), **Chivo Mono** (data/ledger).
-- Theme: **Fiduciary archival** — cream paper (`#F4F3ED`), fiduciary green (`#1E3B2D`), copper seal (`#A85B42`), ledger rule (`#D4D2C9`).
-- Shell: **Masthead + Canvas**, no fixed sidebars. Intelligence "Folio" drawer opens from the right on demand. Global footer acts like a colophon.
-- No backend endpoints. Live stream is a client-side scripted simulator advancing one trace step every 1.5s.
-
-## Design directions explored
-1. **Iteration 1 (replaced)** — Dark "Bloomberg Terminal" aesthetic (Cabinet Grotesk + IBM Plex Mono, 3-column fixed-sidebar shell, tracing-beam Agent Vote Grid).
-2. **Iteration 2 (current)** — Light "Fiduciary archival" aesthetic. Editorial newspaper-style mastheads. Ledger-framed KPIs. **Radial Consensus Dial** as the signature moment, replacing the agent grid: 14 specialist chairs arrayed on a half-circle SVG arc, ink-stroke lines drawn from each spoken agent to a central Consensus hub. Veto state triggers a shock-ring around the hub.
+- Stack: React 19 + React Router 7 + Tailwind CSS + shadcn primitives (unused) + `@phosphor-icons/react`.
+- Typography: **Cabinet Grotesk** (display), **Manrope** (body), **IBM Plex Mono** (data).
+- Theme: dark "Bloomberg-Terminal-but-beautiful" — `#0A0A0A` base, `rounded-sm` (2px) edges, strict 7-state colour vocabulary.
+- Shell: fixed left nav + fixed header + center workspace + fixed right intelligence rail.
+- Global providers: `ToastProvider` + `CommandPaletteProvider` wrap Routes.
+- No backend. Live stream advances via scripted `setTimeout`.
 
 ## User personas
-1. **Advisor** — runs council deliberations, reviews consensus, takes a seat in the live session.
-2. **Compliance officer** — lives in Audit & Replay; ratifies HITL approvals from the Folio drawer.
-3. **Tenant admin** — operates in "Chambers" (plan, quotas, feature writs, SSO, retention).
+1. **Advisor** — convenes councils, takes a seat in live sessions, drills into individual agents.
+2. **Compliance officer** — ratifies approvals (toast feedback), audits replays.
+3. **Tenant admin** — Chambers tab for plan, quotas, flags, SSO, retention.
 
-## Core requirements (static)
-- 6 screens, strict 7-state vocabulary, compliance banner sticky above the fold on live sessions.
-- Streaming-first live session, but visualized as committee deliberation rather than a terminal log.
-- Domain-specific RIA data everywhere; no lorem.
-- `data-testid` on all interactive/informational elements.
+## What's been implemented (2026-04-24)
 
-## What's been implemented (2026-04-24 — iteration 2)
-- ✅ Mock data: 14 agents across 4 layers, 8 sessions, 6 integrations, 4 compliance alerts, 3 approvals, 5 clients, 7 audit sessions, 8 feature writs, 6 users, 4 quotas, 16-step live stream script.
-- ✅ Shell: `Masthead` (top nav with centered link rail, brand seal, Intelligence folio trigger), `PinnedDrawer` (folio with client dossier + compliance pulse + awaiting-counsel queue + WORM summary), `PageFrame` + `PageMasthead` editorial title block + `Canvas` + `SectionRule`.
-- ✅ `StateTag` with full archival palette for all 9 states.
-- ✅ **Dashboard** — editorial masthead "The committee convened 142 times…", 4-column KPI ledger with ▲▼ deltas, live-council lede article, governance sidenote with the blocking veto highlighted, ledger of recent sessions (8 rows), gazette of 6 integration tiles.
-- ✅ **New Session** — "A new matter is brought before the council." · legal docket-style filing with Newsreader-italic client selector, chip groups for jurisdiction/risk/objectives, terminal-prompt textarea, 4 giant serif number inputs, Counsel's annotations column, file-and-convene submit (navigates to live).
-- ✅ **Live Council Session** (SIGNATURE) — sticky compliance banner; Radial Consensus Dial SVG with 14 nodes on half-circle arc, ink strokes drawn from spoken agents to Consensus hub, copper pulse on RUNNING, green fill on COMPLETED, wine-red fill + shock-ring on VETOED; pause/resume control; "Court transcript · verbatim, as set" with THOUGHT/ACTION/OBSERVATION/RESPONSE labels; ink-pen cursor on live line; Verdict panel with 4 tabs (Summary/Actions/Risks/Audit). Vetoed path at /council/live/CW-2040.
-- ✅ **Audit & Replay** — "The immutable record of every deliberation." · library card-catalogue search (wired filter over id/client/advisor/jurisdiction) + 4 filter pills + Vetoed-only toggle + Export packet; Catalogue of sessions on left; Folio panel on right with trace timeline (numbered steps, step-type dots, rule-marker spine).
-- ✅ **Integrations** — "The council's correspondents in the field." · 2-column grid of 6 provider cards, selection updates Counsel's note sidebar with correspondence details; gazette table of 6 Temporal-durable sync runs with archival state tags.
-- ✅ **Chambers (Tenant Admin)** — "The rules of the house." · vertical tab rail with 6 tabs (Profile of Chambers, Plan & Quotas, Feature Writs, Bench Access, Identity · SAML, Retention Policy); Writ toggles have 2px borders and flip a block between bg-fiduciary and bg-canvas.
-- ✅ Motion: `cw-node-pulse` (mechanical, no glow), `cw-stroke-draw` (line ink in from node to hub), `cw-veto-shock` (stroke-ring once), `cw-typeset-in` (fade + tiny x-slide for new transcript lines), `cw-ink-cursor` (pen-block blink), `cw-drawer-in`.
+### Iteration 1 — Dark terminal base
+All 6 screens (Dashboard, New Session, Live Session, Audit & Replay, Integrations, Tenant Admin) with shell, state badges, mock data, streaming simulator, compliance banner.
+
+### Iteration 3 — Full polish pass (current)
+- ✅ **⌘K Command Palette** (`CommandPalette.jsx`) — global overlay triggered by Cmd/Ctrl+K or by clicking the header search. Filters navigation, sessions, clients, agents with ArrowUp/Down + Enter + Esc. Per-group labels. Keyboard hints footer.
+- ✅ **Radial Committee Diagram** (`RadialCommittee.jsx`) — full-circle SVG with 14 agent nodes, 60 tick-marks on the outer ring, ink edges drawn from every spoken agent to a central Consensus hub (blue for running, green for completed, red for vetoed). Running nodes get an animated pulse halo; vetoed triggers a shock-ring. Replaces the flat agent-vote grid as the signature moment on Live Session.
+- ✅ **Agent Drill-Down Modal** (`AgentDrillModal.jsx`) — click any radial node OR any agent name in the thought stream; modal shows mission, latest utterance, operating metrics (latency/tokens/confidence/model), retrieved evidence with citations, trace excerpts, governance footer.
+- ✅ **Clients index** (`Clients.jsx`) — 5 household cards with initials avatar, AUM/target/age tiles, 24-month performance sparkline with delta %, session count + last state. Search + jurisdiction pills + risk pills filter the grid.
+- ✅ **Client Profile** (`ClientProfile.jsx`) — masthead hero with narrative + 4-stat summary + gradient performance chart; portfolio donut chart + 4 allocation legend + accounts dotted-leader list; session history table; right-rail compliance history + Quick Actions (New council, Export dossier).
+- ✅ **Toast system** (`ToastProvider.jsx`) — bottom-right toasts with variants (success/warning/danger/info), auto-dismiss at ~4s, click-to-dismiss, pulse dot, slide-in/out animations.
+- ✅ **Dashboard upgrades** — area-gradient sparklines, bar chart for veto rate, 7×24 **activity heatmap** (blue-intensity grid for past week's council activity with peak annotation), **dual-line intraday chart** (sessions + p50 latency with gradient areas).
+- ✅ **Approval queue wired** — right-rail Approve/Decline buttons trigger variant toasts and remove the item from the queue; count badge updates.
+- ✅ **Atmosphere** — `cw-ambient-bg` drifting grid, `cw-scanlines` decorative overlay on Live Session dial, `cw-reveal` + `cw-stagger` mount animations, `cw-modal-in` + `cw-scrim-in` for overlays.
+- ✅ **Deep-link support** — `?agent=<Name>` on Live Session auto-opens the drill modal.
+- ✅ **Mock data expanded**: `INTRADAY_SESSIONS/VETOS/LATENCY`, `WEEK_HEATMAP` (7×24), `AGENT_DETAILS` (per-agent model/mission/citations/metrics), `PORTFOLIOS` (5 clients × accounts × allocation), `CLIENT_SESSIONS`, `CLIENT_SPARKS`.
 
 ## Testing status
-- Testing subagent iteration_2: **100% frontend pass** (40/41 playwright assertions; the 1 failure was a test-script provider-name typo, not a product defect). Zero console errors. Both bugs from iteration_1 (audit search unwired; nested buttons) are fixed and re-verified.
+- iteration_3: **28/28 frontend checks pass** after one testing-agent fix.
+  - Bug fixed by tester: `cw-scanlines` class applied directly to the thought-stream scroll container set `pointer-events: none` on the whole subtree, blocking clicks on agent-name buttons. Fix: moved scanlines to an absolute sibling overlay.
+- No backend issues (backend is not in scope).
+- No lint errors. No console errors. All provided `data-testid`s confirmed.
 
-## Prioritized backlog (P0/P1/P2)
-- **P1**: Wire FastAPI backend + `useCouncilSocket` WebSocket hook per Appendix J so the radial dial is driven by real server events.
-- **P1**: Clients index + client drill-down page (currently routes redirect home).
-- **P2**: Tablet/responsive breakpoints (current layout is built for ≥ 1440 px).
-- **P2**: Real handlers on Ratify/Decline in the Folio drawer approval queue.
-- **P2**: ⌘K command palette across clients/sessions/trace IDs.
-- **P3**: Per-agent drill-down drawer showing that agent's rationale, citations, and trace excerpt.
+## Prioritized backlog
+- **P1** Wire a FastAPI backend + `useCouncilSocket` WebSocket so the radial dial is driven by real events per Appendix J.
+- **P2** Tablet/responsive breakpoints (currently optimised for ≥ 1440).
+- **P2** Agent-to-agent influence edges (show which agents cited which others) on the radial diagram.
+- **P2** Focus trap + focus restore on command palette and modal close (a11y polish).
+- **P2** Persistent client pinning so opening a session anywhere auto-loads the right dossier.
+- **P3** Add sparklines to Audit Viewer row items (session duration, step count).
 
 ## Next tasks
-1. Ask whether to proceed to real backend + WebSocket streaming for the live session.
-2. Clients index page + CRUD.
-3. Real approval actions + toast notifications.
+1. Ask user whether to proceed to the real backend + WebSocket integration.
+2. Tablet breakpoints.
+3. Agent influence edges on radial diagram.

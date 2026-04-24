@@ -1,0 +1,41 @@
+{
+  "summary": "Completed full frontend-only UI/integration testing of the rebuilt Council Wealth (fiduciary-archival aesthetic). Tested all 6 screens (Dashboard, New Session, Live CW-2041 running, Live CW-2040 vetoed, Audit & Replay, Integrations, Tenant Admin/Chambers), top masthead nav, pinned drawer (open/ESC/close-button), radial dial (14 nodes), transcript streaming, verdict tabs, audit search wiring, integrations provider selection + sidebar sync, tenant admin tabs + feature writ toggles, and state-tag palette rendering. 40 of 41 playwright assertions passed; the single failure was a test-side name mismatch (see note below), not a product defect. Zero React/console errors observed. Both bugs reported in iteration_1 are now fixed.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": [
+    "Dashboard: page-title renders '142 times ... twenty-four hours.', 4 KPI entries (SESSIONS/VETO RATE/SYNC HEALTH/AVG. DELIBERATION), live lede, governance sidenote with 3 compliance alerts, 8 ledger rows, 6 integration gazette tiles",
+    "Masthead nav: Dashboard, New Session, Live Council (with pulsing dot), Audit & Replay, Integrations, Chambers all navigate correctly; brand link + back to Dashboard works",
+    "Pinned drawer: INTELLIGENCE button opens from right; shows client dossier, compliance pulse, 3 approval queue items each with Ratify + Decline, WORM archive block; dismisses via Close button and via ESC key",
+    "New Session: client select present, 3 jurisdiction chips (US/UK/EU), 3 risk chips (Conservative/Moderate/Aggressive), 6 objective chips (Retirement/Tax/Risk/Estate/Income/Insurance), prompt editor, Save draft + File & convene; chips toggle on click; submit navigates to /council/live/CW-2041",
+    "Live CW-2041 (running): amber RUNNING compliance banner, radial dial SVG with exactly 14 agent nodes, central consensus hub, transcript streams >=10 labeled THOUGHT/ACTION/OBSERVATION/RESPONSE lines within 3.5s, 4-tab verdict panel (summary/actions/risks/audit) with working tab switch",
+    "Live CW-2040 (vetoed): red VETOED compliance banner and verdict-vetoed panel render",
+    "Audit & Replay: catalogue renders 7 rows, search input IS WIRED (typing 'zzzzz' filters 7 -> 0), Vetoed-only toggle present, Folio trace timeline renders 11 numbered steps with colored dots",
+    "Integrations: 6 provider cards render (Wealthbox, Salesforce FSC, Orion Advisor, Black Diamond, Plaid, Morningstar Direct) with state tags; clicking Salesforce FSC updates counsel's note sidebar text to include 'Salesforce'; Sync history table renders 6 rows; nested-button warning from iteration_1 is fixed (card is now div role=button)",
+    "Tenant Admin/Chambers: 6 vertical tabs (profile/quotas/flags/users/sso/retention), tab switch works, Feature Writs shows 8 flag toggles and toggling one updates internal state (aria-checked / DOM state changes)",
+    "State tags render across dashboard with correct palette keys (running=2, waiting_approval=4, approved=3, vetoed=2, archived=1, failed=2)"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "review_request uses short provider names (Salesforce, Orion, Morningstar) but mockData.js uses long names (Salesforce FSC, Orion Advisor, Morningstar Direct). Not a bug, but worth aligning with the PRD if the deliverable expects the short forms.",
+    "Masthead nav active-link detection in Masthead.jsx line 86 uses loc.pathname.startsWith(l.to.split('/').slice(0,3).join('/')) — for the Dashboard link ('/'), this evaluates to startsWith('') which always matches. It is patched by the l.end branch, but if any future nav item uses '/', the fallback would spuriously underline Dashboard. Fine as-is, worth flagging.",
+    "PinnedDrawer: the APPROVAL_QUEUE items render Ratify/Decline buttons with no onClick handlers — acceptable for a frontend-only mock but worth noting that these are visual-only.",
+    "StateTag.jsx covers QUEUED/RUNNING/WAITING_APPROVAL/APPROVED/VETOED/FAILED/ARCHIVED/COMPLETED/CONNECTED — the review_request's mute 'ARCHIVED' palette is present; all state keys in use on dashboard render without falling back to QUEUED default.",
+    "No accessibility labels on pinned-drawer toggle-held-away checkbox or on masthead Intelligence button (aria-expanded) — minor polish."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend-only)", "frontend": "~100% (40/41 playwright assertions; the 1 fail was a test-script provider-name typo, not a product defect)" },
+  "test_credentials": "N/A",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "previously_reported_bugs_status": {
+    "audit_search_not_wired_iteration_1": "FIXED — typing in audit-search filters catalogue rows (verified 7 -> 0 for non-matching query)",
+    "nested_button_in_integrations_iteration_1": "FIXED — outer card is now a div[role=button], inner Dispatch sync button is independent; zero console errors observed"
+  },
+  "context_for_next_testing_agent": "Frontend-only app at https://component-hub-64.preview.emergentagent.com. Mock data in /app/frontend/src/data/mockData.js. Provider names in mockData include suffixes ('Salesforce FSC', 'Orion Advisor', 'Morningstar Direct'), so data-testids are e.g. provider-Salesforce FSC, not provider-Salesforce. Live session route /council/live/:sessionId supports CW-2041 (running) and CW-2040 (vetoed). Masthead is the top nav with data-testid nav-dashboard/nav-new-session/nav-live/nav-audit/nav-integrations/nav-admin. Drawer opens via btn-open-drawer, closes via btn-close-drawer or ESC. Audit search is wired via useMemo filter. No backend; no auth."
+}

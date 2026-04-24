@@ -1,554 +1,551 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import {
-  ShieldCheck, ShieldSlash, Pause, Play, Export, CircleNotch, CaretRight,
-  ChartLineUp, Warning, CheckCircle, XCircle, Brain, Broadcast
-} from '@phosphor-icons/react';
-import AppShell from '@/components/layout/AppShell';
-import StateBadge from '@/components/shared/StateBadge';
-import { RailSection } from '@/components/layout/RightRail';
+import PageFrame, { PageMasthead, Canvas, SectionRule } from '@/components/layout/PageFrame';
+import StateTag from '@/components/shared/StateTag';
 import { AGENTS, LIVE_STREAM_SCRIPT, RECENT_SESSIONS, CLIENTS } from '@/data/mockData';
 
-const LAYER_ORDER = ['INGESTION', 'DELIBERATION', 'GOVERNANCE', 'INTELLIGENCE'];
-const LAYER_LABELS = {
-  INGESTION: 'Ingestion',
-  DELIBERATION: 'Deliberation',
-  GOVERNANCE: 'Governance',
-  INTELLIGENCE: 'Intelligence',
-};
+/* ----------------------------- Radial Dial ----------------------------- */
 
-function pad(n) { return String(n).padStart(2, '0'); }
-function formatElapsed(sec) {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${pad(m)}:${pad(s)}`;
-}
-function nowClock() {
-  const d = new Date();
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const DIAL_W = 940;
+const DIAL_H = 500;
+const CX = DIAL_W / 2;
+const CY = 440;      // hub near bottom
+const R_NODE = 380;  // outer radius where agent nodes sit
+const R_LABEL = 420; // label ring
+
+function nodePosition(i, total) {
+  // Spread across upper arc from 180° to 360° (left to right of bottom hub)
+  const startDeg = 185;
+  const endDeg = 355;
+  const t = i / (total - 1);
+  const deg = startDeg + (endDeg - startDeg) * t;
+  const rad = (deg * Math.PI) / 180;
+  return {
+    x: CX + R_NODE * Math.cos(rad),
+    y: CY + R_NODE * Math.sin(rad),
+    lx: CX + R_LABEL * Math.cos(rad),
+    ly: CY + R_LABEL * Math.sin(rad),
+    deg,
+  };
 }
 
-function AgentCard({ agent, state, confidence, summary, highlight }) {
-  const isRunning = state === 'RUNNING';
-  const isCompleted = state === 'COMPLETED';
-  const isVetoed = state === 'VETOED';
-  const borderColor = isVetoed ? 'border-cw-vetoed/50' : isRunning ? 'border-cw-running/45' : isCompleted ? 'border-white/20' : 'border-white/10';
-  const bg = isVetoed ? 'bg-[rgba(220,38,38,0.06)]' : isRunning ? 'bg-cw-elevated' : 'bg-cw-surface';
+function stateFill(state) {
+  switch (state) {
+    case 'RUNNING':   return { fill: '#A85B42', stroke: '#A85B42' };
+    case 'COMPLETED': return { fill: '#1E3B2D', stroke: '#1E3B2D' };
+    case 'VETOED':    return { fill: '#8B2E2E', stroke: '#8B2E2E' };
+    case 'QUEUED':    return { fill: '#FCFBFA', stroke: '#8A8F85' };
+    default:          return { fill: '#FCFBFA', stroke: '#8A8F85' };
+  }
+}
+
+function RadialDial({ agentStates, vetoed, consensus, completedCount }) {
+  const speakingStrokes = Object.entries(agentStates)
+    .filter(([_, v]) => v.state === 'RUNNING' || v.state === 'COMPLETED' || v.state === 'VETOED')
+    .map(([name]) => name);
 
   return (
-    <div
-      className={[
-        'relative rounded-sm p-3 transition-colors overflow-hidden',
-        'border', borderColor, bg,
-        isRunning ? 'cw-beam-border' : '',
-        highlight ? 'ring-1 ring-white/10' : '',
-      ].join(' ')}
-      data-testid={`agent-card-${agent.name}`}
-    >
-      {isRunning && (
-        <div className="absolute top-0 left-0 right-0 h-px overflow-hidden">
-          <div className="h-full w-1/3 bg-cw-running cw-running-bar" />
-        </div>
-      )}
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <div className="min-w-0">
-          <div className="font-display text-[13px] font-medium text-white/95 truncate">{agent.name}</div>
-          <div className="font-mono text-[9px] tracking-wider text-white/35 uppercase">{agent.role}</div>
-        </div>
-        {isVetoed ? (
-          <ShieldSlash size={14} weight="duotone" className="text-cw-vetoed shrink-0" />
-        ) : isCompleted ? (
-          <CheckCircle size={14} weight="duotone" className="text-cw-approved shrink-0" />
-        ) : isRunning ? (
-          <CircleNotch size={14} weight="bold" className="text-cw-running shrink-0 animate-spin" />
-        ) : (
-          <span className="w-1.5 h-1.5 rounded-full bg-white/20 mt-1.5 shrink-0" />
-        )}
-      </div>
-      <div className="flex items-center gap-2 mb-1">
-        <StateBadge state={state} size="sm" />
-        {confidence != null && (
-          <span className="font-mono text-[10px] text-white/60">conf <span className="text-white/95">{confidence.toFixed(2)}</span></span>
-        )}
-      </div>
-      {summary && (
-        <div className="text-[11px] text-white/55 leading-snug line-clamp-2 mt-1">{summary}</div>
-      )}
+    <div className="relative" data-testid="radial-dial">
+      <svg viewBox={`0 0 ${DIAL_W} ${DIAL_H}`} className="w-full h-auto" style={{ overflow: 'visible' }}>
+        {/* Arc rule */}
+        <path
+          d={`M ${CX + R_NODE * Math.cos((185 * Math.PI) / 180)} ${CY + R_NODE * Math.sin((185 * Math.PI) / 180)}
+              A ${R_NODE} ${R_NODE} 0 0 1 ${CX + R_NODE * Math.cos((355 * Math.PI) / 180)} ${CY + R_NODE * Math.sin((355 * Math.PI) / 180)}`}
+          fill="none"
+          stroke="#1C1E1A"
+          strokeWidth="1"
+          opacity="0.85"
+        />
+        {/* Inner hairline arc */}
+        <path
+          d={`M ${CX + (R_NODE - 40) * Math.cos((185 * Math.PI) / 180)} ${CY + (R_NODE - 40) * Math.sin((185 * Math.PI) / 180)}
+              A ${R_NODE - 40} ${R_NODE - 40} 0 0 1 ${CX + (R_NODE - 40) * Math.cos((355 * Math.PI) / 180)} ${CY + (R_NODE - 40) * Math.sin((355 * Math.PI) / 180)}`}
+          fill="none"
+          stroke="#1C1E1A"
+          strokeWidth="0.5"
+          strokeDasharray="2 3"
+          opacity="0.4"
+        />
+
+        {/* Strokes from spoken agents → hub */}
+        {AGENTS.map((a, i) => {
+          const pos = nodePosition(i, AGENTS.length);
+          const state = agentStates[a.name]?.state || 'QUEUED';
+          if (!speakingStrokes.includes(a.name)) return null;
+          const sc = state === 'VETOED' ? '#8B2E2E' : state === 'RUNNING' ? '#A85B42' : '#1E3B2D';
+          return (
+            <line
+              key={`l-${a.name}`}
+              x1={pos.x}
+              y1={pos.y}
+              x2={CX}
+              y2={CY}
+              stroke={sc}
+              strokeWidth={state === 'VETOED' ? 1.5 : 0.8}
+              className="cw-stroke-anim"
+              style={{ animationDelay: `${i * 30}ms` }}
+              opacity={state === 'QUEUED' ? 0 : 0.7}
+            />
+          );
+        })}
+
+        {/* Agent nodes */}
+        {AGENTS.map((a, i) => {
+          const pos = nodePosition(i, AGENTS.length);
+          const state = agentStates[a.name]?.state || 'QUEUED';
+          const { fill, stroke } = stateFill(state);
+          const running = state === 'RUNNING';
+          const labelAngle = pos.deg - 270; // tangent to arc
+          return (
+            <g key={a.name} data-testid={`node-${a.name}`}>
+              {/* seat number */}
+              <text
+                x={pos.lx}
+                y={pos.ly}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                transform={`rotate(${labelAngle}, ${pos.lx}, ${pos.ly})`}
+                fontFamily="Chivo Mono"
+                fontSize="9"
+                fill="#8A8F85"
+                letterSpacing="1.5"
+              >
+                {String(i + 1).padStart(2, '0')} · {a.name.toUpperCase()}
+              </text>
+              {/* node */}
+              <g className={running ? 'cw-node-running' : ''} style={{ transformOrigin: `${pos.x}px ${pos.y}px` }}>
+                <circle cx={pos.x} cy={pos.y} r={9} fill={fill} stroke={stroke} strokeWidth="1.3" />
+                <text x={pos.x} y={pos.y + 1} textAnchor="middle" dominantBaseline="middle"
+                      fontFamily="Newsreader" fontStyle="italic" fontSize="10"
+                      fill={state === 'QUEUED' ? '#5E635A' : (state === 'COMPLETED' ? '#FCFBFA' : '#FCFBFA')}>
+                  {a.abbr}
+                </text>
+              </g>
+            </g>
+          );
+        })}
+
+        {/* Conclusion Hub */}
+        <g>
+          {/* veto shock ring */}
+          {vetoed && (
+            <circle cx={CX} cy={CY} r={58} fill="none" stroke="#8B2E2E" className="cw-veto-shock" />
+          )}
+          <circle cx={CX} cy={CY} r={48} fill="#FCFBFA" stroke="#1C1E1A" strokeWidth="1.5" />
+          <text x={CX} y={CY - 16} textAnchor="middle" fontFamily="Chivo Mono" fontSize="9" letterSpacing="2" fill="#8A8F85">
+            CONSENSUS
+          </text>
+          <text x={CX} y={CY + 8} textAnchor="middle" fontFamily="Newsreader" fontStyle="italic" fontSize="30" fill={vetoed ? '#8B2E2E' : '#1C1E1A'}>
+            {vetoed ? '0.42' : consensus.toFixed(2)}
+          </text>
+          <text x={CX} y={CY + 26} textAnchor="middle" fontFamily="Chivo Mono" fontSize="9" fill="#8A8F85">
+            {completedCount} / {AGENTS.length} chairs
+          </text>
+        </g>
+
+        {/* Seal at hub */}
+        <g transform={`translate(${CX}, ${CY + 52})`}>
+          <line x1="-40" y1="0" x2="40" y2="0" stroke="#1C1E1A" strokeWidth="0.8" />
+        </g>
+      </svg>
     </div>
   );
 }
+
+/* -------------------------- Transcript -------------------------- */
+
+const STEP_COLOR = {
+  THOUGHT:     { label: 'thought',     color: '#876538' },
+  ACTION:      { label: 'action',      color: '#A85B42' },
+  OBSERVATION: { label: 'observation', color: '#5E635A' },
+  RESPONSE:    { label: 'response',    color: '#1E3B2D' },
+};
+
+function Transcript({ streamed, live, paused }) {
+  const bottomRef = React.useRef(null);
+  React.useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [streamed.length]);
+
+  return (
+    <div className="border border-cw-ink bg-cw-canvas" data-testid="transcript">
+      <div className="flex items-center justify-between px-6 py-3 border-b-2 border-cw-ink bg-cw-masthead">
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-[10.5px] tracking-[0.24em] uppercase text-cw-ink-mute">Court transcript</span>
+          <span className="font-display italic text-[14px] text-cw-ink">verbatim, as set</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: live && !paused ? '#A85B42' : '#8A8F85', animation: live && !paused ? 'cw-node-pulse 1.6s ease-in-out infinite' : 'none' }} />
+          <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-cw-ink-mute">{live ? (paused ? 'paused' : 'setting') : 'replay'}</span>
+        </div>
+      </div>
+
+      <div className="cw-paper-grain relative">
+        <div className="max-h-[440px] overflow-y-auto px-8 py-6 relative">
+          {streamed.map((e, i) => {
+            const s = STEP_COLOR[e.stepType];
+            return (
+              <div key={i} className="cw-typeset pb-5 mb-5 border-b border-dotted border-cw-rule last:border-b-0 relative" data-testid={`trn-line-${i}`}>
+                <div className="flex items-baseline gap-4">
+                  <span className="font-mono text-[10px] tracking-wider text-cw-ink-mute min-w-[48px]">{e.ts || fmtTime(i)}</span>
+                  <span className="font-display italic text-[18px] leading-tight text-cw-ink">{e.agent}</span>
+                  <span className="font-mono text-[9.5px] tracking-[0.22em] uppercase" style={{ color: s.color }}>
+                    [{s.label}]
+                  </span>
+                </div>
+                <p className="mt-2 text-[14.5px] leading-[1.55] text-cw-ink pl-[64px]">
+                  "{e.content}"
+                </p>
+              </div>
+            );
+          })}
+          {live && !paused && (
+            <div className="flex items-baseline gap-4 text-cw-ink-mute">
+              <span className="font-mono text-[10px] min-w-[48px]">{fmtTimeNow()}</span>
+              <span className="font-display italic text-[18px]">The bench</span>
+              <span className="font-mono text-[9.5px] tracking-[0.22em] uppercase">[awaits]</span>
+              <span className="cw-ink-cursor ml-2"></span>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+    </div>
+  );
+}
+function pad(n){return String(n).padStart(2,'0');}
+function fmtTime(i){const t = 14*3600+2*60+11 + i*4; return `${pad(Math.floor(t/3600)%24)}:${pad(Math.floor(t/60)%60)}:${pad(t%60)}`;}
+function fmtTimeNow(){const d=new Date();return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+
+/* --------------------- Recommendation panel --------------------- */
+
+function Verdict({ vetoed }) {
+  const [tab, setTab] = React.useState('summary');
+  const tabs = ['summary', 'actions', 'risks', 'audit'];
+
+  if (vetoed) {
+    return (
+      <div className="border-2 border-cw-vetoed bg-cw-veto-bg/40 p-8" data-testid="verdict-vetoed">
+        <div className="font-mono text-[10.5px] tracking-[0.24em] uppercase text-cw-vetoed mb-3">Opinion of the bench</div>
+        <h3 className="font-display italic text-[28px] leading-tight text-cw-ink mb-3">The petition is not granted.</h3>
+        <p className="text-[14.5px] leading-relaxed text-cw-ink-soft mb-5">
+          Sentinel has invoked a hard veto. The recommendation is not eligible for delivery to the client. Full reasoning is preserved in Historian and is open to advisor and compliance review.
+        </p>
+        <ul className="space-y-2 mb-6 text-[13.5px] border-t border-cw-veto-rule pt-4">
+          {[
+            'FINRA 2111 · suitability mismatch',
+            'Single-issuer concentration 42% · policy ceiling 25%',
+            'Disclosure language insufficient',
+          ].map((r, i) => (
+            <li key={i} className="flex items-start gap-3 border-b border-dotted border-cw-veto-rule pb-2">
+              <span className="w-1.5 h-1.5 bg-cw-vetoed mt-2" />
+              <span className="text-cw-ink">{r}</span>
+            </li>
+          ))}
+        </ul>
+        <button className="h-11 px-6 border border-cw-ink text-cw-ink font-mono text-[11px] tracking-[0.22em] uppercase hover:bg-cw-canvas">Request a revision</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-2 border-cw-ink bg-cw-canvas" data-testid="verdict-panel">
+      <div className="flex border-b-2 border-cw-ink">
+        {tabs.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            data-testid={`verdict-tab-${t}`}
+            className={[
+              'flex-1 h-11 font-mono text-[11px] tracking-[0.22em] uppercase border-r last:border-r-0 border-cw-ink transition-colors',
+              tab === t ? 'bg-cw-ink text-cw-canvas' : 'bg-cw-canvas text-cw-ink-soft hover:bg-cw-masthead',
+            ].join(' ')}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="p-7 text-[14.5px] leading-relaxed text-cw-ink-soft min-h-[260px]">
+        {tab === 'summary' && (
+          <div className="space-y-3">
+            <p className="text-cw-ink font-display italic text-[22px] leading-snug">
+              A phased retirement-income approach: 4.2% initial withdrawal under dynamic guardrails, Social Security delayed to age seventy, and a ten-year bond-tent glidepath from fifty to thirty per cent in bonds.
+            </p>
+            <p>
+              Tax-efficient income is stacked with staged Roth conversions sized to the 24% bracket to avoid IRMAA Tier 2; Qualified Charitable Distributions commence at age 70½ aligned with RMD onset.
+            </p>
+            <div className="grid grid-cols-2 border-t border-cw-ink mt-5 pt-4 gap-0">
+              <div className="pr-6">
+                <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-cw-ink-mute">Median terminal</div>
+                <div className="font-display italic text-[30px] leading-none text-cw-ink mt-1">$3.11M</div>
+              </div>
+              <div className="pl-6 border-l border-cw-ink">
+                <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-cw-ink-mute">Plan survival</div>
+                <div className="font-display italic text-[30px] leading-none text-cw-fiduciary mt-1">92.4%</div>
+              </div>
+            </div>
+          </div>
+        )}
+        {tab === 'actions' && (
+          <ol className="space-y-3 list-decimal list-inside marker:font-mono marker:text-cw-ink-mute">
+            {[
+              'Open a Roth conversion schedule of $85k per year through age 70.',
+              'Delay Social Security to age 70 (base +$11,400/yr).',
+              'Establish a two-year cash floor in short-duration Treasuries.',
+              'Set portfolio drift alerts at ±20% with a rebalancing workflow.',
+              'Schedule QCDs at age 70½ aligned with the RMD commencement.',
+            ].map((a, i) => <li key={i} className="text-cw-ink">{a}</li>)}
+          </ol>
+        )}
+        {tab === 'risks' && (
+          <ul className="space-y-3">
+            {[
+              ['Sequence-of-returns risk elevated during the first decade (σ = 14.2%).', 'WAITING_APPROVAL'],
+              ['IRMAA bracket crossing risk if income spikes.', 'WAITING_APPROVAL'],
+              ['Longevity beyond age 95 — plan stress inconclusive.', 'VETOED'],
+              ['Behavioural drawdown aversion post-2022 (Empath).', 'RUNNING'],
+            ].map(([t, st], i) => (
+              <li key={i} className="flex items-start gap-3 border-b border-dotted border-cw-rule pb-3">
+                <StateTag state={st} size="sm" uppercase />
+                <span className="text-cw-ink flex-1">{t}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {tab === 'audit' && (
+          <div className="space-y-2 font-mono text-[12px]">
+            {[
+              ['Trace ID', '7af1-9b02-c02a'],
+              ['Step count', '14 THOUGHT · 6 ACTION · 5 OBSERVATION · 7 RESPONSE'],
+              ['Models', 'gpt-5.2-pro · claude-sonnet-4.5'],
+              ['PII redacted', '100%'],
+              ['WORM eligible', 'yes'],
+              ['Retention', '7 years · SEC 17a-4'],
+            ].map((r) => (
+              <div key={r[0]} className="flex justify-between border-b border-dotted border-cw-rule py-1">
+                <span className="text-cw-ink-mute">{r[0]}</span>
+                <span className="text-cw-ink">{r[1]}</span>
+              </div>
+            ))}
+            <Link to="/compliance/audit" className="mt-4 inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.22em] uppercase text-cw-ink border-b border-cw-ink hover:text-cw-fiduciary pb-0.5">
+              Open in audit viewer →
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------- Page ----------------------------- */
 
 export default function LiveSession() {
   const { sessionId = 'CW-2041' } = useParams();
   const session = RECENT_SESSIONS.find((s) => s.id === sessionId) || RECENT_SESSIONS[0];
   const client = CLIENTS[0];
+  const isVeto = session.status === 'VETOED';
 
-  const isVetoCase = session.status === 'VETOED';
   const [paused, setPaused] = React.useState(false);
   const [elapsed, setElapsed] = React.useState(108);
-  const [streamIndex, setStreamIndex] = React.useState(isVetoCase ? LIVE_STREAM_SCRIPT.length : 8);
+  const [streamIndex, setStreamIndex] = React.useState(isVeto ? LIVE_STREAM_SCRIPT.length : 8);
   const [agentStates, setAgentStates] = React.useState(() => {
-    // initial states
     const map = {};
-    AGENTS.forEach((a) => { map[a.name] = { state: 'QUEUED', confidence: null, summary: null }; });
-    if (isVetoCase) {
-      // final veto state
-      ['Scholar','RetirementPlanner','TaxStrategist','Actuarial','Empath','Historian'].forEach((n) => map[n] = { state: 'COMPLETED', confidence: 0.8, summary: 'Completed.' });
-      map['RiskAnalyst'] = { state: 'COMPLETED', confidence: 0.42, summary: 'Sequence risk exceeds stated moderate profile; flagged.' };
-      map['SentinelCompliance'] = { state: 'VETOED', confidence: null, summary: 'FINRA 2111 suitability & concentration breach.' };
+    AGENTS.forEach((a) => { map[a.name] = { state: 'QUEUED', confidence: null }; });
+    if (isVeto) {
+      ['Scholar','RetirementPlanner','TaxStrategist','Actuarial','Empath','Historian'].forEach((n) => map[n] = { state: 'COMPLETED', confidence: 0.8 });
+      map['RiskAnalyst'] = { state: 'COMPLETED', confidence: 0.42 };
+      map['SentinelCompliance'] = { state: 'VETOED', confidence: null };
       return map;
     }
-    // running default: first batch completed, Sentinel running
-    map['Historian']          = { state: 'COMPLETED', confidence: 1.00, summary: 'Trace opened and persisted.' };
-    map['Scholar']            = { state: 'COMPLETED', confidence: 0.92, summary: '8 citations retrieved. US jurisdiction.' };
-    map['RetirementPlanner']  = { state: 'COMPLETED', confidence: 0.87, summary: '4.2% initial, SSA delay to 70, bond tent glidepath.' };
-    map['TaxStrategist']      = { state: 'COMPLETED', confidence: 0.91, summary: 'Staged Roth $85k/yr, QCD at 70½.' };
-    map['RiskAnalyst']        = { state: 'COMPLETED', confidence: 0.85, summary: 'Maintain 2y cash floor; 20% drift rebalance.' };
-    map['Actuarial']          = { state: 'COMPLETED', confidence: 0.90, summary: '92.4% survival probability at 30y.' };
-    map['Empath']             = { state: 'COMPLETED', confidence: 0.73, summary: 'Frame as income floor, not withdrawal.' };
-    map['SentinelCompliance'] = { state: 'RUNNING',   confidence: null, summary: 'Running suitability + disclosure checks.' };
+    map['Historian']          = { state: 'COMPLETED', confidence: 1.00 };
+    map['Scholar']            = { state: 'COMPLETED', confidence: 0.92 };
+    map['RetirementPlanner']  = { state: 'COMPLETED', confidence: 0.87 };
+    map['TaxStrategist']      = { state: 'COMPLETED', confidence: 0.91 };
+    map['RiskAnalyst']        = { state: 'COMPLETED', confidence: 0.85 };
+    map['Actuarial']          = { state: 'COMPLETED', confidence: 0.90 };
+    map['Empath']             = { state: 'COMPLETED', confidence: 0.73 };
+    map['SentinelCompliance'] = { state: 'RUNNING',   confidence: null };
     return map;
   });
 
-  // Tick clock
   React.useEffect(() => {
     if (paused) return;
     const id = setInterval(() => setElapsed((x) => x + 1), 1000);
     return () => clearInterval(id);
   }, [paused]);
 
-  // Stream advance
   React.useEffect(() => {
-    if (paused || isVetoCase) return;
+    if (paused || isVeto) return;
     if (streamIndex >= LIVE_STREAM_SCRIPT.length) return;
     const t = setTimeout(() => {
-      const next = LIVE_STREAM_SCRIPT[streamIndex];
+      const nxt = LIVE_STREAM_SCRIPT[streamIndex];
       setAgentStates((prev) => {
         const clone = { ...prev };
-        const cur = clone[next.agent] || { state: 'QUEUED' };
-        if (next.stepType === 'THOUGHT' || next.stepType === 'ACTION') {
-          if (cur.state === 'QUEUED') clone[next.agent] = { ...cur, state: 'RUNNING', summary: next.content };
-          else clone[next.agent] = { ...cur, summary: next.content };
-        } else if (next.stepType === 'RESPONSE') {
-          const conf = next.agent === 'SentinelCompliance' ? null
-                       : next.agent === 'Empath' ? 0.73
-                       : next.agent === 'Actuarial' ? 0.90
+        const cur = clone[nxt.agent] || { state: 'QUEUED' };
+        if (nxt.stepType === 'THOUGHT' || nxt.stepType === 'ACTION' || nxt.stepType === 'OBSERVATION') {
+          if (cur.state === 'QUEUED') clone[nxt.agent] = { ...cur, state: 'RUNNING' };
+        } else if (nxt.stepType === 'RESPONSE') {
+          const conf = nxt.agent === 'SentinelCompliance' ? null
+                       : nxt.agent === 'Empath' ? 0.73
+                       : nxt.agent === 'Actuarial' ? 0.90
                        : 0.85 + Math.random() * 0.08;
-          const state = next.agent === 'SentinelCompliance'
-            ? (next.content.startsWith('APPROVED') ? 'COMPLETED' : 'VETOED')
+          const state = nxt.agent === 'SentinelCompliance'
+            ? (nxt.content.startsWith('APPROVED') ? 'COMPLETED' : 'VETOED')
             : 'COMPLETED';
-          clone[next.agent] = { state, confidence: conf, summary: next.content };
-        } else if (next.stepType === 'OBSERVATION') {
-          clone[next.agent] = { ...cur, state: 'RUNNING', summary: next.content };
+          clone[nxt.agent] = { state, confidence: conf };
         }
         return clone;
       });
       setStreamIndex((i) => i + 1);
-    }, 1400);
+    }, 1500);
     return () => clearTimeout(t);
-  }, [streamIndex, paused, isVetoCase]);
+  }, [streamIndex, paused, isVeto]);
 
-  // compute consensus
-  const votes = Object.entries(agentStates)
-    .filter(([_, v]) => v.state === 'COMPLETED' && v.confidence != null)
-    .map(([_, v]) => v.confidence);
-  const consensus = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : 0;
-  const vetoed = isVetoCase || Object.values(agentStates).some((v) => v.state === 'VETOED');
   const completedCount = Object.values(agentStates).filter((v) => v.state === 'COMPLETED' || v.state === 'VETOED').length;
+  const votes = Object.values(agentStates).filter((v) => v.state === 'COMPLETED' && v.confidence != null).map((v) => v.confidence);
+  const consensus = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : 0;
+  const vetoed = isVeto || Object.values(agentStates).some((v) => v.state === 'VETOED');
+  const finalState = vetoed ? 'VETOED' : (streamIndex >= LIVE_STREAM_SCRIPT.length ? 'APPROVED' : 'RUNNING');
 
-  const sessionStatus = vetoed ? 'VETOED' : (streamIndex >= LIVE_STREAM_SCRIPT.length ? 'APPROVED' : 'RUNNING');
-
-  // Grouped agents
-  const grouped = LAYER_ORDER.map((layer) => ({
-    layer,
-    agents: AGENTS.filter((a) => a.layer === layer),
-  }));
-
-  // Stream rendering: all items already streamed
-  const streamed = isVetoCase
+  const streamed = isVeto
     ? LIVE_STREAM_SCRIPT.slice(0, 6).concat([
-        { agent: 'RiskAnalyst', stepType: 'OBSERVATION', content: 'Sequence risk exceeds stated MODERATE profile.' },
-        { agent: 'SentinelCompliance', stepType: 'ACTION', content: 'Evaluating FINRA 2111 suitability and concentration.' },
-        { agent: 'SentinelCompliance', stepType: 'OBSERVATION', content: 'Concentration threshold exceeded (single-issuer 42%).' },
-        { agent: 'SentinelCompliance', stepType: 'RESPONSE', content: 'VETOED. Policy v2026-04. Reason: suitability & concentration.' },
+        { agent: 'RiskAnalyst',        stepType: 'OBSERVATION', content: 'Sequence risk exceeds stated Moderate profile.' },
+        { agent: 'SentinelCompliance', stepType: 'ACTION',      content: 'Evaluating FINRA 2111 suitability and single-issuer concentration.' },
+        { agent: 'SentinelCompliance', stepType: 'OBSERVATION', content: 'Concentration 42% exceeds the 25% policy ceiling.' },
+        { agent: 'SentinelCompliance', stepType: 'RESPONSE',    content: 'VETOED. Policy v2026-04. Reasons: suitability and concentration.' },
       ])
     : LIVE_STREAM_SCRIPT.slice(0, streamIndex);
 
-  return (
-    <AppShell
-      title={`Session ${session.id} · ${session.clientName}`}
-      subtitle="Live Council Deliberation"
-      hideRightRail={false}
-      rightRail={
-        <>
-          <RailSection label="Client Snapshot">
-            <div className="space-y-1.5 text-[12px]">
-              <div className="flex justify-between"><span className="text-white/50">Name</span><span className="text-white/95">{client.name}</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Age / Retire</span><span className="font-mono text-white/95">{client.age} / {client.retireAge}</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Risk</span><span className="font-mono text-white/95">{client.risk}</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Jurisdiction</span><span className="font-mono text-white/95">{client.jurisdiction}</span></div>
-              <div className="flex justify-between"><span className="text-white/50">AUM</span><span className="font-mono text-white/95">${(client.aum/1e6).toFixed(2)}M</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Need</span><span className="font-mono text-white/95">${(client.need/1000).toFixed(0)}k/yr</span></div>
-            </div>
-          </RailSection>
-          <RailSection label="Session Metadata">
-            <div className="space-y-1.5 text-[12px]">
-              <div className="flex justify-between"><span className="text-white/50">Session</span><span className="font-mono text-white/95">{session.id}</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Advisor</span><span className="text-white/95">S. Navarro</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Firm</span><span className="text-white/95">Aldrich & Quinn</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Started</span><span className="font-mono text-white/95">{session.startedAt}</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Trace</span><span className="font-mono text-white/95">7af1…c02</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Workflow</span><span className="font-mono text-white/95">AGENT_FANOUT</span></div>
-              <div className="flex justify-between"><span className="text-white/50">Model</span><span className="font-mono text-white/95">gpt-5.2-pro</span></div>
-            </div>
-          </RailSection>
-          <RailSection label="Alerts" icon={Warning}>
-            {vetoed ? (
-              <ul className="space-y-2 text-[12px]">
-                <li className="flex gap-2 items-start"><span className="w-1.5 h-1.5 rounded-full bg-cw-vetoed mt-1.5" /><span className="text-white/80">Concentration 42% &gt; policy 25%</span></li>
-                <li className="flex gap-2 items-start"><span className="w-1.5 h-1.5 rounded-full bg-cw-vetoed mt-1.5" /><span className="text-white/80">Suitability mismatch · risk MODERATE</span></li>
-                <li className="flex gap-2 items-start"><span className="w-1.5 h-1.5 rounded-full bg-cw-waiting mt-1.5" /><span className="text-white/80">Disclosure language insufficient</span></li>
-              </ul>
-            ) : (
-              <ul className="space-y-2 text-[12px]">
-                <li className="flex gap-2 items-start"><span className="w-1.5 h-1.5 rounded-full bg-cw-approved mt-1.5" /><span className="text-white/80">No blocking compliance findings</span></li>
-                <li className="flex gap-2 items-start"><span className="w-1.5 h-1.5 rounded-full bg-cw-approved mt-1.5" /><span className="text-white/80">Estate docs not required</span></li>
-                <li className="flex gap-2 items-start"><span className="w-1.5 h-1.5 rounded-full bg-cw-approved mt-1.5" /><span className="text-white/80">Actuarial inputs complete</span></li>
-              </ul>
-            )}
-          </RailSection>
-        </>
-      }
-    >
-      {/* Compliance Banner — always above the fold */}
-      <ComplianceBanner status={vetoed ? 'VETOED' : sessionStatus === 'APPROVED' ? 'APPROVED' : 'REVIEWING'} />
+  const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const seconds = String(elapsed % 60).padStart(2, '0');
 
-      {/* Consensus header */}
-      <section className="mt-4 rounded-sm border border-white/10 bg-cw-surface overflow-hidden" data-testid="consensus-header">
-        <div className="grid grid-cols-[1fr_auto]">
-          <div className="p-5 border-r border-white/10 cw-grid-bg">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Broadcast size={12} className="text-cw-running" />
-              <span className="font-mono text-[10px] tracking-[0.25em] text-cw-running uppercase">Council Consensus</span>
-              <StateBadge state={sessionStatus} size="sm" pulse={sessionStatus === 'RUNNING'} />
-            </div>
-            <h2 className="font-display text-[22px] leading-tight tracking-tight text-white/95 mb-1.5">
-              {vetoed
-                ? 'Blocked by SentinelCompliance — recommendation not eligible for delivery'
-                : 'Phased retirement-income strategy with staged Roth conversions'}
-            </h2>
-            <p className="text-[12px] text-white/55 max-w-2xl leading-relaxed">
-              {vetoed
-                ? 'Suitability mismatch (FINRA 2111), concentration breach (single-issuer 42% > 25% policy), and disclosure deficiency. Review or request revision before any outbound communication.'
-                : 'Weighted consensus across Retirement, Tax, Risk, Actuarial, and Empath. Sentinel clearance finalizing. Eligible for WORM export on approval.'}
-            </p>
+  return (
+    <PageFrame>
+      <PageMasthead
+        eyebrow={`Session ${session.id} · Live`}
+        meta={`Trace 7af1…c02 · Elapsed ${minutes}:${seconds}`}
+        title={<><span className="not-italic">{session.clientName}.</span> A committee <span className="text-cw-copper">sits</span>.</>}
+        lede={vetoed
+          ? 'The bench has invoked a hard veto. The matter stands; the recommendation does not travel. Read the reasoning, or request revision.'
+          : "Fourteen specialist chairs convene for Mrs. Wilson's retirement-income question. Deliberation is set in real time; Sentinel holds final review."}
+        right={
+          <div className="flex flex-col items-end gap-2">
+            <StateTag state={finalState} uppercase />
+            <div className="font-mono text-[10.5px] tracking-[0.22em] uppercase text-cw-ink-mute">advisor · S. Navarro</div>
           </div>
-          <div className="p-5 w-[280px] flex flex-col justify-between">
-            <div>
-              <div className="font-mono text-[10px] tracking-[0.25em] text-white/40 uppercase mb-2">Confidence</div>
-              <div className="flex items-baseline gap-1.5">
-                <span className={`font-mono text-[40px] leading-none tracking-tight ${vetoed ? 'text-cw-vetoed' : 'text-white/95'}`}>
-                  {vetoed ? '0.42' : consensus.toFixed(2)}
+        }
+      />
+
+      <ComplianceBanner state={finalState} />
+
+      <Canvas>
+        {/* Dial hero */}
+        <section className="grid grid-cols-12 gap-10 items-start mb-14" data-testid="dial-section">
+          <div className="col-span-12 lg:col-span-8 relative">
+            <div className="border border-cw-ink bg-cw-canvas relative overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-3 border-b-2 border-cw-ink bg-cw-masthead">
+                <span className="font-mono text-[10.5px] tracking-[0.24em] uppercase text-cw-ink-mute">The bench · radial consensus</span>
+                <span className="font-mono text-[10.5px] tracking-[0.22em] uppercase text-cw-ink-mute">chairs 01–14</span>
+              </div>
+              <div className="p-8 cw-paper-grain">
+                <RadialDial agentStates={agentStates} vetoed={vetoed} consensus={consensus} completedCount={completedCount} />
+              </div>
+              <div className="px-6 py-3 border-t-2 border-cw-ink flex items-center justify-between bg-cw-masthead">
+                <button onClick={() => setPaused((p) => !p)} data-testid="btn-pause"
+                        className="font-mono text-[10.5px] tracking-[0.22em] uppercase text-cw-ink hover:text-cw-fiduciary">
+                  {paused ? '▸ Resume deliberation' : '❚❚ Pause deliberation'}
+                </button>
+                <span className="font-mono text-[10.5px] tracking-[0.22em] uppercase text-cw-ink-mute">
+                  {streamed.length} events · backpressure · <span className="text-cw-fiduciary">ok</span>
                 </span>
-                <span className="font-mono text-[13px] text-white/30">/1.00</span>
-              </div>
-              <div className="h-1 mt-3 bg-white/[0.06] rounded-sm overflow-hidden">
-                <div className={`h-full ${vetoed ? 'bg-cw-vetoed' : 'bg-gradient-to-r from-cw-running to-cw-approved'}`}
-                     style={{ width: `${(vetoed ? 0.42 : consensus) * 100}%` }} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-4 text-[11px]">
-              <div className="rounded-sm border border-white/10 bg-cw-bg p-2">
-                <div className="font-mono text-[10px] text-white/40">Agents</div>
-                <div className="font-mono text-[15px] text-white/95">{completedCount} / 14</div>
-              </div>
-              <div className="rounded-sm border border-white/10 bg-cw-bg p-2">
-                <div className="font-mono text-[10px] text-white/40">Elapsed</div>
-                <div className="font-mono text-[15px] text-white/95">{formatElapsed(elapsed)}</div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* controls */}
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/10 bg-[#101010]">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setPaused((p) => !p)}
-              data-testid="btn-stream-toggle"
-              className="h-7 px-3 rounded-sm border border-white/10 bg-cw-surface hover:bg-cw-elevated hover:border-white/25 text-[11px] text-white/85 flex items-center gap-1.5"
-            >
-              {paused ? <Play size={11} weight="fill" /> : <Pause size={11} weight="fill" />}
-              {paused ? 'Resume stream' : 'Pause stream'}
-            </button>
-            <span className="font-mono text-[10px] text-white/40">
-              ws://cw/{session.id} · {streamed.length} events · backpressure <span className="text-cw-approved">ok</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="h-7 px-3 rounded-sm border border-white/10 bg-cw-surface hover:bg-cw-elevated text-[11px] text-white/80 flex items-center gap-1.5" data-testid="btn-export">
-              <Export size={11} /> Export trace
-            </button>
-            <Link to="/compliance/audit" className="h-7 px-3 rounded-sm border border-white/10 bg-cw-surface hover:bg-cw-elevated text-[11px] text-white/80 flex items-center gap-1.5">
-              Open in Audit <CaretRight size={11} />
-            </Link>
-          </div>
-        </div>
-      </section>
+          {/* Client dossier */}
+          <aside className="col-span-12 lg:col-span-4">
+            <div className="border-t-2 border-cw-ink pt-4">
+              <div className="font-mono text-[10.5px] tracking-[0.24em] uppercase text-cw-ink-mute">Client dossier</div>
+              <h3 className="font-display italic text-[32px] leading-none text-cw-ink mt-2 mb-4">{client.name}</h3>
 
-      {/* Agent vote grid */}
-      <section className="mt-6" data-testid="agent-grid">
-        <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] tracking-[0.25em] text-white/40 uppercase">Agent Votes</span>
-            <span className="font-mono text-[10px] text-white/30">4 layers · {AGENTS.length} specialists</span>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] font-mono tracking-wider text-white/50">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cw-queued" />QUEUED</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cw-running cw-pulse" />RUNNING</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cw-approved" />COMPLETED</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cw-vetoed" />VETOED</span>
-          </div>
-        </div>
-        <div className="space-y-5">
-          {grouped.map((g) => (
-            <div key={g.layer}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-mono text-[10px] tracking-[0.2em] text-white/35 uppercase">{LAYER_LABELS[g.layer]}</span>
-                <div className="flex-1 h-px bg-white/[0.06]" />
+              <div className="space-y-2 border-t border-cw-ink pt-4 text-[14px]">
+                {[
+                  ['Age / retirement', `${client.age} / ${client.retireAge}`, true],
+                  ['Risk profile', client.risk, false],
+                  ['Jurisdiction', client.jurisdiction, true],
+                  ['Assets under mgmt.', `$${(client.aum/1e6).toFixed(2)}M`, true],
+                  ['Target annual income', `$${(client.need/1000).toFixed(0)}k`, true],
+                ].map((r) => (
+                  <div key={r[0]} className="flex items-baseline justify-between border-b border-dotted border-cw-rule pb-1">
+                    <span className="text-cw-ink-soft">{r[0]}</span>
+                    <span className={r[2] ? 'font-mono text-cw-ink' : 'font-display text-cw-ink'}>{r[1]}</span>
+                  </div>
+                ))}
               </div>
-              <div className="grid grid-cols-4 gap-2.5">
-                {g.agents.map((a) => {
-                  const st = agentStates[a.name] || { state: 'QUEUED' };
-                  return (
-                    <AgentCard
-                      key={a.name}
-                      agent={a}
-                      state={st.state}
-                      confidence={st.confidence}
-                      summary={st.summary}
-                      highlight={a.name === 'SentinelCompliance'}
-                    />
-                  );
-                })}
+
+              <div className="mt-8 border-t border-cw-ink pt-4">
+                <div className="font-mono text-[10.5px] tracking-[0.24em] uppercase text-cw-ink-mute mb-2">Session meta</div>
+                <div className="space-y-1.5 text-[13px] font-mono">
+                  <Row k="session" v={session.id} />
+                  <Row k="advisor" v="S. Navarro" />
+                  <Row k="firm" v="Aldrich & Quinn" />
+                  <Row k="workflow" v="AGENT_FANOUT" />
+                  <Row k="model" v="gpt-5.2-pro" />
+                  <Row k="trace" v="7af1…c02" />
+                </div>
+              </div>
+
+              <div className="mt-8 border-t border-cw-ink pt-4">
+                <div className="font-mono text-[10.5px] tracking-[0.24em] uppercase text-cw-ink-mute mb-3">Legend</div>
+                <div className="flex flex-wrap gap-2">
+                  <StateTag state="QUEUED" size="sm" uppercase />
+                  <StateTag state="RUNNING" size="sm" uppercase />
+                  <StateTag state="COMPLETED" size="sm" uppercase />
+                  <StateTag state="VETOED" size="sm" uppercase />
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </section>
+          </aside>
+        </section>
 
-      {/* Thought stream + Recommendation tabs */}
-      <section className="mt-6 grid grid-cols-12 gap-6">
-        <ThoughtStream streamed={streamed} paused={paused} live={sessionStatus === 'RUNNING'} />
-        <RecommendationPanel vetoed={vetoed} />
-      </section>
-    </AppShell>
+        {/* Transcript + Verdict */}
+        <SectionRule label="Transcript & verdict" tail="SET AS SPOKEN · ARCHIVED TO WORM" />
+        <div className="grid grid-cols-12 gap-10 mb-16">
+          <div className="col-span-12 lg:col-span-8"><Transcript streamed={streamed} live={finalState === 'RUNNING'} paused={paused} /></div>
+          <div className="col-span-12 lg:col-span-4"><Verdict vetoed={vetoed} /></div>
+        </div>
+      </Canvas>
+    </PageFrame>
   );
 }
 
-// ---------------- Sub-components ----------------
-
-function ComplianceBanner({ status }) {
-  const styles = {
-    APPROVED: { icon: ShieldCheck, color: 'text-cw-approved', border: 'border-cw-approved/40', bg: 'bg-[rgba(16,185,129,0.08)]', label: 'Compliance · APPROVED' },
-    REVIEWING:{ icon: ShieldCheck, color: 'text-cw-running',  border: 'border-cw-running/40',  bg: 'bg-[rgba(59,130,246,0.08)]', label: 'Compliance · UNDER REVIEW' },
-    VETOED:   { icon: ShieldSlash, color: 'text-cw-vetoed',   border: 'border-cw-vetoed/50',   bg: 'bg-[rgba(220,38,38,0.10)]',  label: 'Compliance · VETOED BY SENTINEL' },
-  }[status] || {};
-  const Icon = styles.icon;
+function Row({ k, v }) {
   return (
-    <div className={`rounded-sm border ${styles.border} ${styles.bg} px-4 py-3 flex items-center justify-between`} data-testid="compliance-banner">
-      <div className="flex items-center gap-3">
-        <Icon size={18} weight="duotone" className={styles.color} />
-        <div>
-          <div className={`font-mono text-[10px] tracking-[0.25em] uppercase ${styles.color}`}>{styles.label}</div>
-          <div className="text-[13px] text-white/95 leading-tight mt-0.5">
-            {status === 'VETOED'
-              ? 'Recommendation is NOT eligible for delivery. Policy v2026-04 · FINRA 2111 · SEC Reg BI'
-              : status === 'APPROVED'
-                ? 'Output eligible for delivery. Historian persisted. WORM export queued.'
-                : 'Sentinel evaluating suitability, disclosure, and concentration policies.'}
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {status === 'VETOED' ? (
-          <>
-            <button className="h-8 px-3 rounded-sm border border-white/15 bg-cw-elevated text-[12px] text-white/85 hover:border-white/25">Request revision</button>
-            <button className="h-8 px-3 rounded-sm border border-cw-vetoed/40 text-cw-vetoed text-[12px] hover:bg-cw-vetoed/10">Escalate compliance</button>
-          </>
-        ) : (
-          <>
-            <span className="font-mono text-[10px] text-white/40">policy v2026-04</span>
-            <button className="h-8 px-3 rounded-sm border border-white/15 bg-cw-elevated text-[12px] text-white/85 hover:border-white/25" data-testid="btn-view-policy">View policy</button>
-          </>
-        )}
-      </div>
+    <div className="flex items-baseline justify-between border-b border-dotted border-cw-rule pb-1">
+      <span className="text-cw-ink-mute">{k}</span>
+      <span className="text-cw-ink">{v}</span>
     </div>
   );
 }
 
-function ThoughtStream({ streamed, paused, live }) {
-  const bottomRef = React.useRef(null);
-  React.useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [streamed.length]);
-
-  const stepColor = {
-    THOUGHT: 'text-cw-archived',
-    ACTION: 'text-cw-running',
-    OBSERVATION: 'text-cw-waiting',
-    RESPONSE: 'text-cw-approved',
-  };
-
+/* Compliance Banner — sticky under masthead */
+function ComplianceBanner({ state }) {
+  const cfg = {
+    APPROVED: { text: 'The matter is approved. The recommendation is eligible for delivery.', color: '#1E3B2D', bg: '#E5EBE6', rule: '#B0C4B6' },
+    RUNNING:  { text: 'Sentinel review is underway — suitability, disclosure, and concentration.', color: '#876538', bg: '#EAE5D9', rule: '#C7B9A3' },
+    VETOED:   { text: 'The matter is vetoed by the Sentinel. The recommendation shall not travel.', color: '#8B2E2E', bg: '#F2E6E6', rule: '#D4A5A5' },
+  }[state];
+  if (!cfg) return null;
   return (
-    <div className="col-span-8 rounded-sm border border-white/10 bg-[#0c0c0c] overflow-hidden" data-testid="thought-stream">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-[#101010]">
-        <div className="flex items-center gap-2">
-          <Brain size={13} weight="duotone" className="text-cw-archived" />
-          <span className="font-mono text-[10px] tracking-[0.25em] text-white/45 uppercase">Real-time Thought Stream</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`w-1.5 h-1.5 rounded-full ${live && !paused ? 'bg-cw-running cw-pulse' : 'bg-white/25'}`} />
-          <span className="font-mono text-[10px] tracking-wider text-white/50">{live ? (paused ? 'PAUSED' : 'STREAMING') : 'REPLAY'}</span>
-        </div>
+    <section
+      className="cw-banner-draw sticky top-0 z-30 border-y"
+      style={{ backgroundColor: cfg.bg, borderColor: cfg.rule }}
+      data-testid={`compliance-banner-${state.toLowerCase()}`}
+    >
+      <div className="max-w-[1480px] mx-auto px-10 py-3 flex items-center gap-5">
+        <span className="font-mono text-[10.5px] tracking-[0.24em] uppercase" style={{ color: cfg.color }}>Compliance · {state.toLowerCase().replace('_', ' ')}</span>
+        <span className="h-4 w-px" style={{ backgroundColor: cfg.color, opacity: 0.5 }} />
+        <span className="font-display italic text-[16px] leading-tight" style={{ color: cfg.color }}>{cfg.text}</span>
+        <span className="ml-auto font-mono text-[10px] tracking-[0.22em] uppercase" style={{ color: cfg.color, opacity: 0.7 }}>policy v2026-04</span>
       </div>
-      <div className="h-[440px] overflow-y-auto px-4 py-3 font-mono text-[12px] leading-[1.75]">
-        {streamed.length === 0 && <div className="text-white/30">Awaiting first event…</div>}
-        {streamed.map((e, i) => (
-          <div key={i} className="cw-stream-line flex gap-3" data-testid={`stream-line-${i}`}>
-            <span className="text-white/30 shrink-0 w-16">{e.ts || nowClockOffset(i)}</span>
-            <span className={`shrink-0 w-[110px] truncate text-white/95`}>{e.agent}</span>
-            <span className={`shrink-0 w-[90px] ${stepColor[e.stepType]}`}>{e.stepType}</span>
-            <span className="text-white/70 flex-1">{e.content}</span>
-          </div>
-        ))}
-        {live && !paused && (
-          <div className="cw-stream-line flex gap-3 text-white/40">
-            <span className="w-16">{nowClock()}</span>
-            <span className="w-[110px]">CouncilOrchestrator</span>
-            <span className="w-[90px] text-cw-running">STREAM</span>
-            <span className="flex-1 cw-cursor">awaiting next event</span>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-    </div>
-  );
-}
-function nowClockOffset(i) {
-  const base = 14 * 3600 + 2 * 60 + 11; // 14:02:11
-  const t = base + i * 4;
-  return `${pad(Math.floor(t/3600) % 24)}:${pad(Math.floor(t/60) % 60)}:${pad(t % 60)}`;
-}
-
-function RecommendationPanel({ vetoed }) {
-  const [tab, setTab] = React.useState('summary');
-  const TABS = [
-    { k: 'summary', label: 'Summary' },
-    { k: 'actions', label: 'Actions' },
-    { k: 'risks', label: 'Risks' },
-    { k: 'audit', label: 'Audit' },
-  ];
-
-  if (vetoed) {
-    return (
-      <div className="col-span-4 rounded-sm border border-cw-vetoed/30 bg-[rgba(220,38,38,0.05)] p-5" data-testid="recommendation-panel">
-        <div className="flex items-center gap-2 mb-2">
-          <XCircle size={16} className="text-cw-vetoed" weight="duotone" />
-          <span className="font-mono text-[10px] tracking-[0.25em] text-cw-vetoed uppercase">Blocked Output</span>
-        </div>
-        <h3 className="font-display text-[18px] text-white/95 leading-tight mb-2">Delivery not permitted</h3>
-        <p className="text-[12px] text-white/65 mb-3 leading-relaxed">
-          SentinelCompliance blocked this session. The advisor-safe rejection below is available, and the full trace remains in Historian for review.
-        </p>
-        <ul className="space-y-1.5 text-[12px] text-white/80 mb-4">
-          <li className="flex gap-2"><span className="text-cw-vetoed">·</span> FINRA 2111 suitability mismatch</li>
-          <li className="flex gap-2"><span className="text-cw-vetoed">·</span> Concentration 42% &gt; 25% policy</li>
-          <li className="flex gap-2"><span className="text-cw-vetoed">·</span> Disclosure language insufficient</li>
-        </ul>
-        <button className="w-full h-9 rounded-sm border border-white/15 bg-cw-elevated text-[12px] text-white/85 hover:border-white/30">
-          Request revision
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="col-span-4 rounded-sm border border-white/10 bg-cw-surface flex flex-col" data-testid="recommendation-panel">
-      <div className="flex border-b border-white/10">
-        {TABS.map((t) => (
-          <button
-            key={t.k}
-            onClick={() => setTab(t.k)}
-            data-testid={`rec-tab-${t.k}`}
-            className={[
-              'flex-1 h-10 text-[12px] font-medium tracking-wide border-b-2 transition-colors',
-              tab === t.k ? 'text-white/95 border-white' : 'text-white/50 border-transparent hover:text-white/80',
-            ].join(' ')}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div className="p-5 text-[12px] leading-relaxed text-white/80 flex-1">
-        {tab === 'summary' && (
-          <div className="space-y-3">
-            <p className="text-[13px] text-white/95">
-              Phased retirement-income approach: <span className="font-mono text-white">4.2%</span> initial withdrawal with dynamic guardrails, SSA delayed to 70, and a 10-year bond-tent glidepath (50% → 30% bonds).
-            </p>
-            <p>
-              Stack tax-efficient income with staged Roth conversions sized to the 24% bracket (IRMAA Tier 2 avoidance) and plan QCDs at 70½.
-            </p>
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <div className="rounded-sm border border-white/10 bg-cw-bg p-2.5">
-                <div className="font-mono text-[10px] text-white/40">p50 terminal</div>
-                <div className="font-mono text-[16px] text-white/95">$3.11M</div>
-              </div>
-              <div className="rounded-sm border border-white/10 bg-cw-bg p-2.5">
-                <div className="font-mono text-[10px] text-white/40">Plan survival</div>
-                <div className="font-mono text-[16px] text-cw-approved">92.4%</div>
-              </div>
-            </div>
-          </div>
-        )}
-        {tab === 'actions' && (
-          <ul className="space-y-2.5">
-            {[
-              'Open Roth conversion schedule: $85k/yr through age 70',
-              'Delay Social Security claim to age 70 (base +$11,400/yr)',
-              'Establish 2-year cash floor in short-duration treasuries',
-              'Set portfolio drift alerts at ±20% with rebalancing workflow',
-              'Schedule QCD at age 70½ aligned with RMD start',
-            ].map((a, i) => (
-              <li key={i} className="flex gap-2"><CaretRight size={12} className="text-cw-running mt-0.5 shrink-0" /><span>{a}</span></li>
-            ))}
-          </ul>
-        )}
-        {tab === 'risks' && (
-          <ul className="space-y-2.5">
-            {[
-              { t: 'Sequence-of-returns risk elevated first 10y · σ=14.2%', c: 'waiting' },
-              { t: 'IRMAA bracket crossing if income spikes', c: 'waiting' },
-              { t: 'Longevity beyond age 95 · plan stress inconclusive', c: 'warn' },
-              { t: 'Behavioral drawdown aversion post-2022 (Empath)', c: 'info' },
-            ].map((r, i) => (
-              <li key={i} className="flex gap-2">
-                <span className={`w-1.5 h-1.5 rounded-full mt-1.5 ${r.c === 'waiting' ? 'bg-cw-waiting' : r.c === 'warn' ? 'bg-cw-vetoed' : 'bg-cw-running'}`} />
-                <span>{r.t}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {tab === 'audit' && (
-          <div className="space-y-2.5 font-mono text-[11px]">
-            <div className="flex justify-between"><span className="text-white/50">Trace ID</span><span className="text-white/90">7af1-9b02-c02a</span></div>
-            <div className="flex justify-between"><span className="text-white/50">Steps</span><span className="text-white/90">14 THOUGHT · 6 ACTION · 5 OBSERVATION · 7 RESPONSE</span></div>
-            <div className="flex justify-between"><span className="text-white/50">Models</span><span className="text-white/90">gpt-5.2-pro · claude-4.5-sonnet</span></div>
-            <div className="flex justify-between"><span className="text-white/50">PII redacted</span><span className="text-cw-approved">100%</span></div>
-            <div className="flex justify-between"><span className="text-white/50">WORM eligible</span><span className="text-cw-approved">yes</span></div>
-            <div className="flex justify-between"><span className="text-white/50">Retention</span><span className="text-white/90">7 years · SEC 17a-4</span></div>
-            <Link to="/compliance/audit" className="mt-3 inline-flex items-center gap-1.5 text-cw-running hover:underline">Open in audit viewer <CaretRight size={11} /></Link>
-          </div>
-        )}
-      </div>
-    </div>
+    </section>
   );
 }

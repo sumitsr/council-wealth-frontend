@@ -9,6 +9,8 @@ import Integrations from '@/pages/Integrations';
 import TenantAdmin from '@/pages/TenantAdmin';
 import Clients from '@/pages/Clients';
 import ClientProfile from '@/pages/ClientProfile';
+import Onboarding from '@/pages/Onboarding';
+import Settings from '@/pages/Settings';
 import { ToastProvider } from '@/components/shared/ToastProvider';
 import { CommandPaletteProvider } from '@/components/shared/CommandPalette';
 
@@ -29,7 +31,8 @@ function App() {
               <Route path="/admin/tenant" element={<TenantAdmin />} />
               <Route path="/clients" element={<Clients />} />
               <Route path="/clients/:clientId" element={<ClientProfile />} />
-              <Route path="/settings" element={<Navigate to="/admin/tenant" replace />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/signup" element={<Onboarding />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </CommandPaletteProvider>

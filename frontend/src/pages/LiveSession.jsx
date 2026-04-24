@@ -9,6 +9,7 @@ import StateBadge from '@/components/shared/StateBadge';
 import { RailSection } from '@/components/layout/RightRail';
 import RadialCommittee from '@/components/shared/RadialCommittee';
 import AgentDrillModal from '@/components/shared/AgentDrillModal';
+import ReplayScrubber from '@/components/shared/ReplayScrubber';
 import { useToast } from '@/components/shared/ToastProvider';
 import { AGENTS, LIVE_STREAM_SCRIPT, RECENT_SESSIONS, CLIENTS } from '@/data/mockData';
 
@@ -28,6 +29,31 @@ function nowClockOffset(i) {
   return `${pad(Math.floor(t / 3600) % 24)}:${pad(Math.floor(t / 60) % 60)}:${pad(t % 60)}`;
 }
 
+// Pure derivation of agent states from a slice of the stream script.
+// This makes scrubbing predictable: any streamIndex maps to a deterministic state.
+function deriveAgentStates(scriptSlice, isVetoCase) {
+  const map = {};
+  AGENTS.forEach((a) => { map[a.name] = { state: 'QUEUED', confidence: null, summary: null }; });
+  scriptSlice.forEach((nx) => {
+    const cur = map[nx.agent] || { state: 'QUEUED' };
+    if (nx.stepType === 'THOUGHT' || nx.stepType === 'ACTION' || nx.stepType === 'OBSERVATION') {
+      if (cur.state === 'QUEUED') map[nx.agent] = { ...cur, state: 'RUNNING', summary: nx.content };
+      else map[nx.agent] = { ...cur, summary: nx.content };
+    } else if (nx.stepType === 'RESPONSE') {
+      const conf = nx.agent === 'SentinelCompliance' ? null
+                   : nx.agent === 'Empath' ? 0.73
+                   : nx.agent === 'Actuarial' ? 0.90
+                   : nx.agent === 'RiskAnalyst' && isVetoCase ? 0.42
+                   : 0.87;
+      const state = nx.agent === 'SentinelCompliance'
+        ? (nx.content.startsWith('APPROVED') ? 'COMPLETED' : 'VETOED')
+        : 'COMPLETED';
+      map[nx.agent] = { state, confidence: conf, summary: nx.content };
+    }
+  });
+  return map;
+}
+
 export default function LiveSession() {
   const { sessionId = 'CW-2041' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -36,30 +62,31 @@ export default function LiveSession() {
   const client = CLIENTS[0];
   const isVetoCase = session.status === 'VETOED';
 
+  // For vetoed case use a slightly different script that ends in VETO
+  const effectiveScript = React.useMemo(() => {
+    if (!isVetoCase) return LIVE_STREAM_SCRIPT;
+    return LIVE_STREAM_SCRIPT.slice(0, 6).concat([
+      { agent: 'RiskAnalyst', stepType: 'OBSERVATION', content: 'Sequence risk exceeds stated MODERATE profile.' },
+      { agent: 'RiskAnalyst', stepType: 'RESPONSE',    content: 'Confidence 0.42 — concentration breach flagged.' },
+      { agent: 'SentinelCompliance', stepType: 'ACTION', content: 'Evaluating FINRA 2111 suitability and concentration.' },
+      { agent: 'SentinelCompliance', stepType: 'OBSERVATION', content: 'Concentration threshold exceeded (single-issuer 42%).' },
+      { agent: 'SentinelCompliance', stepType: 'RESPONSE', content: 'VETOED. Policy v2026-04. Reason: suitability & concentration.' },
+    ]);
+  }, [isVetoCase]);
+
+  const totalScriptLen = effectiveScript.length;
+
   const [paused, setPaused] = React.useState(false);
   const [elapsed, setElapsed] = React.useState(108);
-  const [streamIndex, setStreamIndex] = React.useState(isVetoCase ? LIVE_STREAM_SCRIPT.length : 8);
+  const [streamIndex, setStreamIndex] = React.useState(isVetoCase ? totalScriptLen : 8);
   const [focusedAgent, setFocusedAgent] = React.useState(null);
+  const [lastPushedIndex, setLastPushedIndex] = React.useState(streamIndex); // toast dedupe
 
-  const [agentStates, setAgentStates] = React.useState(() => {
-    const map = {};
-    AGENTS.forEach((a) => { map[a.name] = { state: 'QUEUED', confidence: null, summary: null }; });
-    if (isVetoCase) {
-      ['Scholar','RetirementPlanner','TaxStrategist','Actuarial','Empath','Historian'].forEach((n) => map[n] = { state: 'COMPLETED', confidence: 0.8, summary: 'Completed.' });
-      map['RiskAnalyst'] = { state: 'COMPLETED', confidence: 0.42, summary: 'Sequence risk exceeds stated moderate profile; flagged.' };
-      map['SentinelCompliance'] = { state: 'VETOED', confidence: null, summary: 'FINRA 2111 suitability & concentration breach.' };
-      return map;
-    }
-    map['Historian']          = { state: 'COMPLETED', confidence: 1.00, summary: 'Trace opened and persisted.' };
-    map['Scholar']            = { state: 'COMPLETED', confidence: 0.92, summary: '8 citations retrieved. US jurisdiction.' };
-    map['RetirementPlanner']  = { state: 'COMPLETED', confidence: 0.87, summary: '4.2% initial, SSA delay to 70, bond tent glidepath.' };
-    map['TaxStrategist']      = { state: 'COMPLETED', confidence: 0.91, summary: 'Staged Roth $85k/yr, QCD at 70½.' };
-    map['RiskAnalyst']        = { state: 'COMPLETED', confidence: 0.85, summary: 'Maintain 2y cash floor; 20% drift rebalance.' };
-    map['Actuarial']          = { state: 'COMPLETED', confidence: 0.90, summary: '92.4% survival probability at 30y.' };
-    map['Empath']             = { state: 'COMPLETED', confidence: 0.73, summary: 'Frame as income floor, not withdrawal.' };
-    map['SentinelCompliance'] = { state: 'RUNNING',   confidence: null, summary: 'Running suitability + disclosure checks.' };
-    return map;
-  });
+  // Derived agent states — updates whenever streamIndex changes (drives scrubbing)
+  const agentStates = React.useMemo(
+    () => deriveAgentStates(effectiveScript.slice(0, streamIndex), isVetoCase),
+    [effectiveScript, streamIndex, isVetoCase]
+  );
 
   // Deep-link focus via ?agent=Name
   React.useEffect(() => {
@@ -77,52 +104,35 @@ export default function LiveSession() {
     return () => clearInterval(id);
   }, [paused]);
 
-  // Stream advancer
+  // Stream advancer — uses pure derivation
   React.useEffect(() => {
-    if (paused || isVetoCase) return;
-    if (streamIndex >= LIVE_STREAM_SCRIPT.length) return;
+    if (paused) return;
+    if (streamIndex >= totalScriptLen) return;
     const t = setTimeout(() => {
-      const nx = LIVE_STREAM_SCRIPT[streamIndex];
-      setAgentStates((prev) => {
-        const c = { ...prev };
-        const cur = c[nx.agent] || { state: 'QUEUED' };
-        if (nx.stepType === 'THOUGHT' || nx.stepType === 'ACTION' || nx.stepType === 'OBSERVATION') {
-          if (cur.state === 'QUEUED') c[nx.agent] = { ...cur, state: 'RUNNING', summary: nx.content };
-          else c[nx.agent] = { ...cur, summary: nx.content };
-        } else if (nx.stepType === 'RESPONSE') {
-          const conf = nx.agent === 'SentinelCompliance' ? null
-                       : nx.agent === 'Empath' ? 0.73
-                       : nx.agent === 'Actuarial' ? 0.90
-                       : 0.85 + Math.random() * 0.08;
-          const state = nx.agent === 'SentinelCompliance'
-            ? (nx.content.startsWith('APPROVED') ? 'COMPLETED' : 'VETOED')
-            : 'COMPLETED';
-          c[nx.agent] = { state, confidence: conf, summary: nx.content };
-          if (nx.agent === 'SentinelCompliance' && nx.content.startsWith('APPROVED')) {
-            push({ variant: 'success', title: 'Sentinel · APPROVED', desc: 'Session eligible for delivery and WORM export.' });
-          }
-        }
-        return c;
-      });
+      const justSeen = effectiveScript[streamIndex];
       setStreamIndex((i) => i + 1);
+      // Toast on Sentinel APPROVED transition (only when advancing forward, dedupe)
+      if (
+        !isVetoCase &&
+        justSeen?.agent === 'SentinelCompliance' &&
+        justSeen?.stepType === 'RESPONSE' &&
+        justSeen?.content?.startsWith('APPROVED') &&
+        streamIndex !== lastPushedIndex
+      ) {
+        setLastPushedIndex(streamIndex);
+        push({ variant: 'success', title: 'Sentinel · APPROVED', desc: 'Session eligible for delivery and WORM export.' });
+      }
     }, 1400);
     return () => clearTimeout(t);
-  }, [streamIndex, paused, isVetoCase, push]);
+  }, [streamIndex, paused, isVetoCase, push, totalScriptLen, effectiveScript, lastPushedIndex]);
 
   const votes = Object.values(agentStates).filter((v) => v.state === 'COMPLETED' && v.confidence != null).map((v) => v.confidence);
   const consensus = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : 0;
-  const vetoed = isVetoCase || Object.values(agentStates).some((v) => v.state === 'VETOED');
+  const vetoed = isVetoCase && streamIndex >= totalScriptLen ? true : Object.values(agentStates).some((v) => v.state === 'VETOED');
   const completedCount = Object.values(agentStates).filter((v) => v.state === 'COMPLETED' || v.state === 'VETOED').length;
-  const sessionStatus = vetoed ? 'VETOED' : (streamIndex >= LIVE_STREAM_SCRIPT.length ? 'APPROVED' : 'RUNNING');
+  const sessionStatus = vetoed ? 'VETOED' : (streamIndex >= totalScriptLen ? 'APPROVED' : 'RUNNING');
 
-  const streamed = isVetoCase
-    ? LIVE_STREAM_SCRIPT.slice(0, 6).concat([
-        { agent: 'RiskAnalyst', stepType: 'OBSERVATION', content: 'Sequence risk exceeds stated MODERATE profile.' },
-        { agent: 'SentinelCompliance', stepType: 'ACTION', content: 'Evaluating FINRA 2111 suitability and concentration.' },
-        { agent: 'SentinelCompliance', stepType: 'OBSERVATION', content: 'Concentration threshold exceeded (single-issuer 42%).' },
-        { agent: 'SentinelCompliance', stepType: 'RESPONSE', content: 'VETOED. Policy v2026-04. Reason: suitability & concentration.' },
-      ])
-    : LIVE_STREAM_SCRIPT.slice(0, streamIndex);
+  const streamed = effectiveScript.slice(0, streamIndex);
 
   const openAgent = (a) => setFocusedAgent(a);
   const closeAgent = () => {
@@ -187,7 +197,7 @@ export default function LiveSession() {
       </div>
 
       {/* Radial Committee hero */}
-      <section className="cw-reveal rounded-sm border border-white/10 bg-cw-surface overflow-hidden mb-6" data-testid="committee-hero">
+      <section className="cw-reveal rounded-sm border border-white/10 bg-cw-surface overflow-hidden mb-4" data-testid="committee-hero">
         <div className="grid grid-cols-[1fr_360px]">
           <div className="relative cw-ambient-bg">
             {/* scanlines layer */}
@@ -258,6 +268,18 @@ export default function LiveSession() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Replay scrubber — narrative tool */}
+      <section className="mb-6 cw-reveal" style={{ animationDelay: '0.05s' }}>
+        <ReplayScrubber
+          script={effectiveScript}
+          streamIndex={streamIndex}
+          setStreamIndex={setStreamIndex}
+          paused={paused}
+          setPaused={setPaused}
+          vetoed={vetoed}
+        />
       </section>
 
       {/* Thought stream + Recommendation tabs */}

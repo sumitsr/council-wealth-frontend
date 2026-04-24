@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only iteration 4 testing complete. ReplayScrubber, distinct Settings page, and 3-step Onboarding all functional end-to-end. 24/26 assertions passed; 2 minor anomalies noted below.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ReplayScrubber · scrub-marker click",
+        "issue": "Clicking scrub-marker-7 (CW-2041, 16-step script) lands on streamIndex=7 instead of expected 8. Likely race with the parent track's onMouseDown handler (which fires first via bubbling and sets index from clientX rounding); marker's onClick uses stopPropagation but mousedown is not stopped. For interior markers the rounded ratio sometimes lands on i instead of i+1 due to Math.round half-to-even/translate-x positioning. Other markers (0, 10) work correctly. Suggest adding e.stopPropagation() to onMouseDown on marker as well, or change track to react to click instead of mousedown.",
+        "selector": "[data-testid='scrub-marker-N']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Onboarding step indicator",
+        "issue": "Substring match for the literal 'Step 1 of 3' lede did not assert positively in one body-text scrape, although StepDot indicators (1/2/3) and check-mark transitions visibly work and step 2→3 nav succeeded. Likely innerText whitespace artifact rather than a real missing element. No user-visible bug.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "ReplayScrubber: stop mousedown propagation on marker (or change track listener to onClick) so marker clicks land on exactly streamIndex=i+1, matching the visual marker. Currently interior markers can be off-by-one."
+  ],
+  "critical_code_review_comments": [
+    "ReplayScrubber.jsx · marker onClick stops only click propagation; the track listens on mousedown which bubbles and races with the click handler. This is the root cause of the off-by-one observed on interior markers.",
+    "LiveSession.jsx is 525 lines and contains four sub-components (ComplianceBanner, ThoughtStream, RecommendationPanel, helpers). Consider extracting ThoughtStream and RecommendationPanel into /components/shared for reuse and to keep page under 300 lines.",
+    "Onboarding.jsx (476 lines) — also over the 700-line threshold guideline target; consider splitting SummaryRail and StepDot/Connector into a shared file."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "92%"},
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 4 features verified: ReplayScrubber positioned below RadialCommittee on /council/live/CW-2041 (16 steps) and /CW-2040 (11 steps, ends in VETOED). Transport buttons (scrub-restart, scrub-back, scrub-forward, scrub-play) work. Auto-advance resumes after scrubbing. Hero btn-stream-toggle label switches Pause↔Resume correctly. /settings is a distinct page (no longer redirects to /admin/tenant), 5 tabs all switch panel content, density chips and notification toggles interactive, btn-save-settings fires success toast. /admin/tenant unchanged (Profile/Quotas/Flags/SSO/Retention all visible — Users tab text not detected by simple substring match but present). /signup loads with 4 tiers (solo/practice/firm/enterprise), step 2 seats +/- and slider work, billing-annual surfaces discount line, addon-* checkboxes update summary, step 3 firm-name auto-derives slug to lowercase_underscored, manual override accepted, juris pills toggle, btn-submit correctly disabled until terms checkbox ticked, on submit toast 'Chambers chartered' fires and navigation lands at / after ~900ms. Only minor finding: marker-click off-by-one on interior markers (see action_items).",
+  "rca of the issue": "ReplayScrubber: track div has onMouseDown={onTrackDown} which calls onSeek(clientX). Markers are children of the track. When you click a marker, mousedown bubbles to the track first (markers don't stopPropagation on mousedown — only on click). onSeek does Math.round((clientX-rect.left)/rect.width * total) — for marker positioned at ((i+0.5)/total)*100% the rounded value can land on i (banker's-rounding-style) instead of i+1, depending on sub-pixel translate-x rendering. Then click fires and would set i+1 — but if React commits both, depending on timing the mousedown value may persist. Fix: add onMouseDown={(e)=>e.stopPropagation()} to the marker wrapper, or move the track seek to onClick."
+}

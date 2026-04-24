@@ -21,6 +21,8 @@ function App() {
           <Route path="/compliance/audit" element={<AuditViewer />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/admin/tenant" element={<TenantAdmin />} />
+          <Route path="/clients" element={<Navigate to="/" replace />} />
+          <Route path="/settings" element={<Navigate to="/admin/tenant" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

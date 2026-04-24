@@ -1,8 +1,10 @@
 import React from 'react';
 import { MagnifyingGlass, Bell, CaretDown, Command } from '@phosphor-icons/react';
 import { CURRENT_USER, TENANT } from '@/data/mockData';
+import { useCommandPalette } from '@/components/shared/CommandPalette';
 
 export default function HeaderBar({ title, subtitle, actions }) {
+  const { open } = useCommandPalette();
   const [clock, setClock] = React.useState(() => new Date());
   React.useEffect(() => {
     const id = setInterval(() => setClock(new Date()), 1000);
@@ -29,6 +31,7 @@ export default function HeaderBar({ title, subtitle, actions }) {
       <div className="flex items-center gap-4">
         {/* Search */}
         <button
+          onClick={open}
           data-testid="header-search"
           className="group flex items-center gap-2 h-9 pl-3 pr-2 rounded-sm border border-white/10 bg-cw-surface hover:bg-cw-elevated hover:border-white/20 transition-colors w-72"
         >

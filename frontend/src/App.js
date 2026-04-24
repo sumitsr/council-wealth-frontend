@@ -7,24 +7,33 @@ import LiveSession from '@/pages/LiveSession';
 import AuditViewer from '@/pages/AuditViewer';
 import Integrations from '@/pages/Integrations';
 import TenantAdmin from '@/pages/TenantAdmin';
+import Clients from '@/pages/Clients';
+import ClientProfile from '@/pages/ClientProfile';
+import { ToastProvider } from '@/components/shared/ToastProvider';
+import { CommandPaletteProvider } from '@/components/shared/CommandPalette';
 
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/council/new" element={<NewSession />} />
-          <Route path="/council/live" element={<Navigate to="/council/live/CW-2041" replace />} />
-          <Route path="/council/live/:sessionId" element={<LiveSession />} />
-          <Route path="/compliance" element={<Navigate to="/compliance/audit" replace />} />
-          <Route path="/compliance/audit" element={<AuditViewer />} />
-          <Route path="/integrations" element={<Integrations />} />
-          <Route path="/admin/tenant" element={<TenantAdmin />} />
-          <Route path="/clients" element={<Navigate to="/" replace />} />
-          <Route path="/settings" element={<Navigate to="/admin/tenant" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <ToastProvider>
+          <CommandPaletteProvider>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/council/new" element={<NewSession />} />
+              <Route path="/council/live" element={<Navigate to="/council/live/CW-2041" replace />} />
+              <Route path="/council/live/:sessionId" element={<LiveSession />} />
+              <Route path="/compliance" element={<Navigate to="/compliance/audit" replace />} />
+              <Route path="/compliance/audit" element={<AuditViewer />} />
+              <Route path="/integrations" element={<Integrations />} />
+              <Route path="/admin/tenant" element={<TenantAdmin />} />
+              <Route path="/clients" element={<Clients />} />
+              <Route path="/clients/:clientId" element={<ClientProfile />} />
+              <Route path="/settings" element={<Navigate to="/admin/tenant" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </CommandPaletteProvider>
+        </ToastProvider>
       </BrowserRouter>
     </div>
   );

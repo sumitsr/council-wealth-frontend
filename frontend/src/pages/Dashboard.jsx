@@ -6,23 +6,82 @@ import {
 } from '@phosphor-icons/react';
 import AppShell from '@/components/layout/AppShell';
 import StateBadge from '@/components/shared/StateBadge';
-import { KPIS, RECENT_SESSIONS, INTEGRATIONS } from '@/data/mockData';
+import { KPIS, RECENT_SESSIONS, INTEGRATIONS, INTRADAY_SESSIONS, INTRADAY_VETOS, INTRADAY_LATENCY, WEEK_HEATMAP } from '@/data/mockData';
 
-function Sparkline({ data, color = '#3b82f6', width = 100, height = 28 }) {
+function Sparkline({ data, color = '#3b82f6', width = 100, height = 28, area = true }) {
   if (!data?.length) return null;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
   const step = width / (data.length - 1);
-  const points = data.map((v, i) => `${i * step},${height - ((v - min) / range) * (height - 4) - 2}`).join(' ');
+  const points = data.map((v, i) => `${i * step},${height - ((v - min) / range) * (height - 4) - 2}`);
+  const lineD = 'M ' + points.join(' L ');
+  const areaD = area ? `${lineD} L ${width},${height} L 0,${height} Z` : null;
+  const gid = `spark-${color.replace('#','')}`;
   return (
     <svg width={width} height={height} className="cw-spark" style={{ color }}>
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <defs>
+        <linearGradient id={gid} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {area && <path d={areaD} fill={`url(#${gid})`} />}
+      <path d={lineD} fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function KpiTile({ label, value, unit, delta, sparkData, sparkColor, testid }) {
+function Bars({ data, color = '#dc2626', width = 100, height = 28 }) {
+  const max = Math.max(...data, 1);
+  const bw = width / data.length - 1.5;
+  return (
+    <svg width={width} height={height} className="cw-spark">
+      {data.map((v, i) => {
+        const h = (v / max) * (height - 2);
+        return <rect key={i} x={i * (bw + 1.5)} y={height - h} width={bw} height={h} fill={v > 0 ? color : 'rgba(255,255,255,0.08)'} opacity={v > 0 ? 0.85 : 1} />;
+      })}
+    </svg>
+  );
+}
+
+function Heatmap({ data }) {
+  // 7 rows x 24 cols
+  const max = Math.max(...data.flat(), 1);
+  const daysLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  return (
+    <div className="flex items-start gap-2">
+      <div className="flex flex-col gap-[2px] pt-0.5 font-mono text-[9px] text-white/35 tracking-wider">
+        {daysLabels.map((d, i) => <span key={i} className="h-[14px] leading-[14px]">{d}</span>)}
+      </div>
+      <div className="flex-1">
+        <div className="grid grid-rows-7 grid-cols-24 gap-[2px]" style={{ gridTemplateColumns: 'repeat(24, 1fr)' }}>
+          {data.map((row, ri) =>
+            row.map((v, ci) => {
+              const intensity = v / max;
+              const bg = v === 0
+                ? 'rgba(255,255,255,0.03)'
+                : `rgba(59,130,246,${0.15 + intensity * 0.8})`;
+              return (
+                <div
+                  key={`${ri}-${ci}`}
+                  className="h-[14px] cw-heat-cell"
+                  style={{ backgroundColor: bg }}
+                  title={`day ${ri} · hour ${ci} · ${v} sessions`}
+                />
+              );
+            })
+          )}
+        </div>
+        <div className="flex justify-between mt-1 font-mono text-[9px] tracking-wider text-white/35">
+          <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KpiTile({ label, value, unit, delta, sparkData, sparkColor, bars, testid }) {
   const isUp = delta > 0;
   const deltaColor = isUp ? 'text-cw-approved' : delta < 0 ? 'text-cw-vetoed' : 'text-white/40';
   return (
@@ -41,7 +100,11 @@ function KpiTile({ label, value, unit, delta, sparkData, sparkColor, testid }) {
           <div className="font-mono text-[32px] leading-none tracking-tight text-white/95">{value}</div>
           {unit && <div className="font-mono text-[11px] text-white/40 mt-1.5">{unit}</div>}
         </div>
-        <div className="opacity-80"><Sparkline data={sparkData} color={sparkColor} /></div>
+        <div className="opacity-85">
+          {bars
+            ? <Bars data={sparkData} color={sparkColor} />
+            : <Sparkline data={sparkData} color={sparkColor} />}
+        </div>
       </div>
     </div>
   );
@@ -62,21 +125,81 @@ export default function Dashboard() {
   return (
     <AppShell title="Command Center" subtitle="Overview / Last 24h" headerActions={null}>
       {/* KPI Strip */}
-      <section className="grid grid-cols-5 gap-3 mb-8" data-testid="kpi-strip">
+      <section className="grid grid-cols-5 gap-3 mb-8 cw-stagger" data-testid="kpi-strip">
         <KpiTile testid="kpi-sessions" label="Sessions · 24h" value={KPIS.sessions24h} unit="council runs" delta={KPIS.sessions24hDelta}
-          sparkData={[42, 51, 48, 63, 59, 72, 81, 76, 84, 92, 88, 142]} sparkColor="#3b82f6" />
-        <KpiTile testid="kpi-veto" label="Veto Rate" value={`${KPIS.vetoRate}%`} unit="SentinelCompliance" delta={KPIS.vetoRateDelta}
-          sparkData={[5.6, 5.4, 5.8, 5.1, 4.9, 5.2, 4.9, 4.8]} sparkColor="#dc2626" />
+          sparkData={INTRADAY_SESSIONS} sparkColor="#3b82f6" />
+        <KpiTile testid="kpi-veto" label="Veto Rate" value={`${KPIS.vetoRate}%`} unit="SentinelCompliance" delta={KPIS.vetoRateDelta} bars
+          sparkData={INTRADAY_VETOS} sparkColor="#dc2626" />
         <KpiTile testid="kpi-sync" label="Sync Health" value={`${KPIS.syncHealth}%`} unit="CRM · PMS · Aggregator" delta={KPIS.syncHealthDelta}
           sparkData={[96.0, 96.2, 96.9, 96.5, 97.1, 97.0, 97.2]} sparkColor="#10b981" />
         <KpiTile testid="kpi-latency" label="Avg Latency" value={`${KPIS.avgLatency}s`} unit="p50 deliberation" delta={KPIS.avgLatencyDelta}
-          sparkData={[14.2, 13.8, 13.1, 12.6, 12.2, 11.9, 11.4]} sparkColor="#a855f7" />
+          sparkData={INTRADAY_LATENCY} sparkColor="#a855f7" />
         <KpiTile testid="kpi-approvals" label="Open Approvals" value={KPIS.openApprovals} unit="HITL · Temporal" delta={undefined}
           sparkData={[4, 5, 3, 6, 5, 7, 7]} sparkColor="#f59e0b" />
       </section>
 
+      {/* Activity heatmap + intraday */}
+      <section className="grid grid-cols-12 gap-3 mb-8 cw-reveal" style={{ animationDelay: '0.2s' }} data-testid="activity-analytics">
+        <div className="col-span-8 rounded-sm border border-white/10 bg-cw-surface p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Broadcast size={12} className="text-cw-running" />
+              <span className="font-mono text-[10px] tracking-[0.25em] text-white/40 uppercase">Council activity · past 7 days</span>
+            </div>
+            <span className="font-mono text-[10px] text-white/40 tracking-wider">peak Thu 13:00 · 12 runs</span>
+          </div>
+          <Heatmap data={WEEK_HEATMAP} />
+        </div>
+        <div className="col-span-4 rounded-sm border border-white/10 bg-cw-surface p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Timer size={12} className="text-cw-archived" />
+              <span className="font-mono text-[10px] tracking-[0.25em] text-white/40 uppercase">Intraday latency · sessions</span>
+            </div>
+          </div>
+          <div className="relative h-[96px]">
+            <svg viewBox="0 0 320 96" width="100%" height="100%" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="cw-latency-area" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
+                </linearGradient>
+                <linearGradient id="cw-session-area" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.20" />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {(() => {
+                const w = 320, h = 96, pad = 4;
+                const s = INTRADAY_SESSIONS;
+                const sMax = Math.max(...s);
+                const sPts = s.map((v, i) => `${(i * (w - pad*2)) / (s.length - 1) + pad},${h - (v / sMax) * (h - 10) - 2}`);
+                const l = INTRADAY_LATENCY;
+                const lMin = Math.min(...l), lMax = Math.max(...l);
+                const lPts = l.map((v, i) => `${(i * (w - pad*2)) / (l.length - 1) + pad},${h - ((v - lMin) / (lMax - lMin || 1)) * (h - 10) - 2}`);
+                const sArea = `M ${sPts.join(' L ')} L ${w - pad},${h} L ${pad},${h} Z`;
+                const lArea = `M ${lPts.join(' L ')} L ${w - pad},${h} L ${pad},${h} Z`;
+                return (
+                  <g>
+                    <path d={sArea} fill="url(#cw-session-area)" />
+                    <path d={`M ${sPts.join(' L ')}`} fill="none" stroke="#3b82f6" strokeWidth="1.25" />
+                    <path d={lArea} fill="url(#cw-latency-area)" />
+                    <path d={`M ${lPts.join(' L ')}`} fill="none" stroke="#a855f7" strokeWidth="1.25" />
+                  </g>
+                );
+              })()}
+            </svg>
+          </div>
+          <div className="flex justify-between mt-2 pt-2 border-t border-white/10 font-mono text-[10px] text-white/50">
+            <span className="flex items-center gap-1.5"><span className="w-2 h-[3px] bg-cw-running" /> sessions</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-[3px] bg-cw-archived" /> p50 latency</span>
+            <span>24 buckets · hourly</span>
+          </div>
+        </div>
+      </section>
+
       {/* Two-col split */}
-      <div className="grid grid-cols-12 gap-6 mb-8">
+      <div className="grid grid-cols-12 gap-6 mb-8 cw-reveal" style={{ animationDelay: '0.3s' }}>
         {/* Recent sessions table */}
         <section className="col-span-8" data-testid="recent-sessions">
           <SectionHeader

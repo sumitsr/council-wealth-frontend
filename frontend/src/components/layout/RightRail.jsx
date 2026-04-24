@@ -2,6 +2,7 @@ import React from 'react';
 import { ShieldCheck, Pulse, Brain, Scales, Export } from '@phosphor-icons/react';
 import StateBadge from '@/components/shared/StateBadge';
 import { COMPLIANCE_ALERTS, APPROVAL_QUEUE } from '@/data/mockData';
+import { useToast } from '@/components/shared/ToastProvider';
 
 export default function RightRail({ children, variant = 'default' }) {
   return (
@@ -30,6 +31,19 @@ function RailSection({ label, icon: Icon, badge, children }) {
 }
 
 function DefaultRail() {
+  const { push } = useToast();
+  const [queue, setQueue] = React.useState(APPROVAL_QUEUE);
+
+  const handle = (id, action) => {
+    const item = queue.find((q) => q.id === id);
+    setQueue((prev) => prev.filter((q) => q.id !== id));
+    push({
+      variant: action === 'approve' ? 'success' : 'warning',
+      title: action === 'approve' ? 'Approval ratified' : 'Approval declined',
+      desc: `${item?.id} · ${item?.client} — ${action === 'approve' ? 'sent for outbound delivery' : 'sent back for revision'}.`,
+    });
+  };
+
   return (
     <div>
       <RailSection
@@ -51,9 +65,14 @@ function DefaultRail() {
         </div>
       </RailSection>
 
-      <RailSection label="Approval Queue" icon={Scales} badge={<span className="font-mono text-[10px] text-cw-waiting">{APPROVAL_QUEUE.length} OPEN</span>}>
+      <RailSection label="Approval Queue" icon={Scales} badge={<span className="font-mono text-[10px] text-cw-waiting">{queue.length} OPEN</span>}>
         <div className="space-y-2">
-          {APPROVAL_QUEUE.map((q) => (
+          {queue.length === 0 && (
+            <div className="text-[12px] text-white/40 italic text-center py-4 border border-dashed border-white/10 rounded-sm">
+              Queue is clear.
+            </div>
+          )}
+          {queue.map((q) => (
             <div key={q.id} className="rounded-sm border border-white/10 bg-cw-surface px-3 py-2.5" data-testid={`rail-approval-${q.id}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="font-mono text-[10px] text-white/70">{q.id}</span>
@@ -62,8 +81,8 @@ function DefaultRail() {
               <div className="text-[12px] text-white/85 font-medium mb-0.5">{q.client}</div>
               <div className="text-[11px] text-white/50 leading-snug">{q.reason}</div>
               <div className="flex items-center gap-2 mt-2">
-                <button className="flex-1 h-7 rounded-sm border border-white/10 bg-cw-elevated hover:border-cw-approved/40 hover:text-cw-approved text-[11px] text-white/80 font-medium transition-colors">Approve</button>
-                <button className="flex-1 h-7 rounded-sm border border-white/10 bg-cw-elevated hover:border-cw-vetoed/40 hover:text-cw-vetoed text-[11px] text-white/80 font-medium transition-colors">Decline</button>
+                <button onClick={() => handle(q.id, 'approve')} data-testid={`rail-approve-${q.id}`} className="flex-1 h-7 rounded-sm border border-white/10 bg-cw-elevated hover:border-cw-approved/40 hover:text-cw-approved text-[11px] text-white/80 font-medium transition-colors">Approve</button>
+                <button onClick={() => handle(q.id, 'decline')} data-testid={`rail-decline-${q.id}`} className="flex-1 h-7 rounded-sm border border-white/10 bg-cw-elevated hover:border-cw-vetoed/40 hover:text-cw-vetoed text-[11px] text-white/80 font-medium transition-colors">Decline</button>
               </div>
             </div>
           ))}

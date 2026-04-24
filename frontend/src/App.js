@@ -1,50 +1,29 @@
-import { useEffect } from "react";
+import React from 'react';
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Dashboard from '@/pages/Dashboard';
+import NewSession from '@/pages/NewSession';
+import LiveSession from '@/pages/LiveSession';
+import AuditViewer from '@/pages/AuditViewer';
+import Integrations from '@/pages/Integrations';
+import TenantAdmin from '@/pages/TenantAdmin';
 
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/council/new" element={<NewSession />} />
+          <Route path="/council/live" element={<Navigate to="/council/live/CW-2041" replace />} />
+          <Route path="/council/live/:sessionId" element={<LiveSession />} />
+          <Route path="/compliance" element={<Navigate to="/compliance/audit" replace />} />
+          <Route path="/compliance/audit" element={<AuditViewer />} />
+          <Route path="/integrations" element={<Integrations />} />
+          <Route path="/admin/tenant" element={<TenantAdmin />} />
+          <Route path="/clients" element={<Navigate to="/" replace />} />
+          <Route path="/settings" element={<Navigate to="/admin/tenant" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </div>

@@ -1,0 +1,55 @@
+{
+  "summary": "Completed frontend-only UI/integration testing of Council Wealth terminal. Tested all 6 screens (Dashboard, New Session, Live Session x2 states, Audit & Replay, Integrations, Tenant Admin), left-nav routing, state badges, live streaming simulation, and right rail. Found 1 functional bug (Audit search input is not wired), 1 React hydration warning (nested button), and otherwise everything renders and integrates correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AuditViewer.jsx",
+        "issue": "The search input has no value/onChange binding. Typing 'Carter', '2040', or 'zzzzz' all return the same 7 rows — search is purely cosmetic. There is also no `query` state variable in the component.",
+        "selector": "[data-testid=\"audit-search\"]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "Integrations.jsx",
+        "issue": "Nested <button> inside <button>: the provider-card is a <button> and contains a 'Sync now' inner <button> at line 113. Causes React hydration warning: 'In HTML, <button> cannot be a descendant of <button>.' Change outer card to a div with role=button or convert inner 'Sync now' to a styled span / onClick-stop.",
+        "selector": "[data-testid^=\"provider-card-\"] button (Sync now)",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Wire the Audit search input: add a `query` state, bind value/onChange, and filter the session list client-side by id/client name (use existing useMemo over AUDIT_SESSIONS).",
+    "Fix nested <button> in Integrations provider cards: either make the outer card a div with onClick+role=button (preserve keyboard accessibility) or replace the inner 'Sync now' <button> with a span + stopPropagation handler."
+  ],
+  "critical_code_review_comments": [
+    "AuditViewer: search input is declared but has no state/handler (line 94-98). Dead UI.",
+    "Integrations: Nested <button> elements break HTML validity and generate React hydration warnings on every page load.",
+    "NewSession handleRun() always navigates to '/council/live/CW-2041' regardless of form inputs — acceptable for frontend-only mock, but document this.",
+    "AuditViewer filter dropdowns (Client/Advisor/Date/Jurisdiction) are static labels with no functional bindings — noted as mock."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "92%"},
+  "test_credentials": "none required",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Base URL: https://component-hub-64.preview.emergentagent.com. Viewport 1920x900. All 6 screens work end-to-end. Verified: KPI strip (5 tiles), 8 recent session rows, 6 integration tiles, live stream simulation (11 lines after 5s), 14 agent cards grouped by 4 layers, recommendation tabs (summary/actions/risks/audit), CW-2040 VETOED banner + blocked panel, 6 providers (Wealthbox, Salesforce FSC, Orion Advisor, Black Diamond, Plaid, Morningstar Direct), 6 sync history rows, 6 admin tabs switch content, 8 feature-flag toggles update state, right rail on all pages. Pending fixes: (1) Audit search wiring, (2) nested-button hydration warning in Integrations provider cards.",
+  "test_results_detail": {
+    "dashboard": {"kpi_tiles": 5, "session_rows": 8, "integration_tiles": 6, "highlight_card": true, "governance_card": true},
+    "left_nav": {"all_6_routes": "PASS (dashboard, new-session, live-session, audit, integrations, admin)"},
+    "new_session": {"objective_chips": 6, "scenario_inputs": 4, "save_draft_present": true, "run_council_navigates_to_live": true},
+    "live_session_2041": {"agent_cards": 14, "stream_lines_after_5s": 11, "rec_tabs": ["summary","actions","risks","audit"], "compliance_banner": "UNDER REVIEW"},
+    "live_session_2040": {"compliance_banner": "VETOED BY SENTINEL", "recommendation_panel_visible": true},
+    "audit": {"total_rows": 7, "vetoed_filter_reduces_to": 1, "search_input_filters": false, "replay_panel_visible": true},
+    "integrations": {"provider_cards": 6, "sync_history_rows": 6, "hydration_warning": "nested button"},
+    "tenant_admin": {"tabs_switch": ["profile","quotas","flags","users","sso","retention"], "flag_toggles": 8, "toggle_updates_state": true},
+    "right_rail_on_all_pages": true,
+    "state_badges_visible": ["RUNNING (pulse)", "VETOED", "APPROVED", "WAITING_APPROVAL", "ARCHIVED", "FAILED", "PENDING", "CONNECTED"]
+  }
+}

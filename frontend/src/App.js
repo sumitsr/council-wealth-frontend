@@ -13,14 +13,16 @@ import Onboarding from '@/pages/Onboarding';
 import Settings from '@/pages/Settings';
 import { ToastProvider } from '@/components/shared/ToastProvider';
 import { CommandPaletteProvider } from '@/components/shared/CommandPalette';
+import { NotificationProvider } from '@/components/shared/NotificationProvider';
 
 function App() {
   return (
     <div className="App">
       <BrowserRouter>
         <ToastProvider>
-          <CommandPaletteProvider>
-            <Routes>
+          <NotificationProvider>
+            <CommandPaletteProvider>
+              <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/council/new" element={<NewSession />} />
               <Route path="/council/live" element={<Navigate to="/council/live/CW-2041" replace />} />
@@ -34,8 +36,9 @@ function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/signup" element={<Onboarding />} />
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </CommandPaletteProvider>
+              </Routes>
+            </CommandPaletteProvider>
+          </NotificationProvider>
         </ToastProvider>
       </BrowserRouter>
     </div>

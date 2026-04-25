@@ -1,7 +1,8 @@
 import React from 'react';
-import { MagnifyingGlass, Bell, CaretDown, Command } from '@phosphor-icons/react';
-import { CURRENT_USER, TENANT } from '@/data/mockData';
+import { MagnifyingGlass, CaretDown, Command } from '@phosphor-icons/react';
+import { CURRENT_USER } from '@/data/mockData';
 import { useCommandPalette } from '@/components/shared/CommandPalette';
+import NotificationBell from '@/components/shared/NotificationBell';
 
 export default function HeaderBar({ title, subtitle, actions }) {
   const { open } = useCommandPalette();
@@ -52,15 +53,7 @@ export default function HeaderBar({ title, subtitle, actions }) {
         </div>
 
         {/* Alerts */}
-        <button
-          data-testid="header-alerts"
-          className="relative h-9 w-9 rounded-sm border border-white/10 bg-cw-surface hover:bg-cw-elevated hover:border-white/20 flex items-center justify-center"
-        >
-          <Bell size={15} className="text-white/70" weight="duotone" />
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] rounded-sm bg-cw-vetoed text-[9px] font-mono font-semibold text-white flex items-center justify-center px-1">
-            4
-          </span>
-        </button>
+        <NotificationBell />
 
         {/* User */}
         <button

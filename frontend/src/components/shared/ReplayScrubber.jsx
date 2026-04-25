@@ -136,6 +136,7 @@ export default function ReplayScrubber({
               <div
                 key={i}
                 onMouseEnter={() => setHover(i + 1)}
+                onMouseDown={(ev) => ev.stopPropagation()}
                 onClick={(ev) => { ev.stopPropagation(); setPaused(true); setStreamIndex(i + 1); }}
                 data-testid={`scrub-marker-${i}`}
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group"

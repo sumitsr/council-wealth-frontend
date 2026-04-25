@@ -195,7 +195,19 @@ export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = React.useState(buildSeed);
 
   const push = React.useCallback((n) => {
-    setNotifications((prev) => [{ id: mkId(), read: false, time: 'now', ...n }, ...prev].slice(0, 60));
+    setNotifications((prev) => {
+      // De-duplicate: if an unread item with the same title+body already exists in the
+      // last 10 entries, refresh its time instead of stacking another copy.
+      const dupIdx = prev.findIndex(
+        (p) => !p.read && p.title === n.title && p.body === n.body
+      );
+      if (dupIdx !== -1 && dupIdx < 10) {
+        const next = prev.slice();
+        next[dupIdx] = { ...next[dupIdx], time: n.time || 'now' };
+        return next;
+      }
+      return [{ id: mkId(), read: false, time: 'now', ...n }, ...prev].slice(0, 60);
+    });
   }, []);
 
   const markRead = React.useCallback((id) => {
